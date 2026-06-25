@@ -1,6 +1,6 @@
 <template>
   <el-card>
-    <template #header><span style="font-weight: 700">问答历史</span></template>
+    <template #header><span style="font-weight: 600; color: #111827">问答历史</span></template>
     <div style="display: flex; gap: 12px; margin-bottom: 16px">
       <el-input v-model="keyword" placeholder="搜索问题..." clearable style="width: 300px" @keyup.enter="fetchData" />
       <el-checkbox v-model="onlyFavorite" @change="fetchData">仅收藏</el-checkbox>

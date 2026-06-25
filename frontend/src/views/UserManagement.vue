@@ -1,6 +1,6 @@
 <template>
   <el-card>
-    <template #header><span style="font-weight: 700">用户管理</span></template>
+    <template #header><span style="font-weight: 600; color: #111827">用户管理</span></template>
     <el-table :data="users" v-loading="loading" stripe>
       <el-table-column prop="username" label="工号" width="120" />
       <el-table-column prop="real_name" label="姓名" width="120" />

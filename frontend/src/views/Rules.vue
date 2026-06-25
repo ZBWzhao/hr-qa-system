@@ -2,7 +2,7 @@
   <el-card>
     <template #header>
       <div style="display: flex; justify-content: space-between; align-items: center">
-        <span style="font-weight: 700">规则问答管理</span>
+        <span style="font-weight: 600; color: #111827">规则问答管理</span>
         <el-button type="primary" @click="showDialog()">新增规则</el-button>
       </div>
     </template>

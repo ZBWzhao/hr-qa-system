@@ -2,7 +2,7 @@
   <el-card>
     <template #header>
       <div style="display: flex; justify-content: space-between; align-items: center">
-        <span style="font-weight: 700">通知公告</span>
+        <span style="font-weight: 600; color: #111827">通知公告</span>
         <el-button v-if="userStore.isHR" type="primary" @click="showDialog()">发布通知</el-button>
       </div>
     </template>
@@ -13,16 +13,16 @@
           <el-tag v-if="!notice.is_read" type="warning" size="small" style="margin-right: 8px">未读</el-tag>
           <span style="font-size: 16px; font-weight: 500">{{ notice.title }}</span>
         </div>
-        <span style="color: #999; font-size: 12px">{{ notice.created_at?.substring(0, 10) }}</span>
+        <span style="color: #9CA3AF; font-size: 12px">{{ notice.created_at?.substring(0, 10) }}</span>
       </div>
-      <div style="color: #666; margin-top: 8px; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ notice.content }}</div>
+      <div style="color: #6B7280; margin-top: 8px; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ notice.content }}</div>
     </div>
     <el-empty v-if="!notices.length" description="暂无通知" />
     <el-pagination style="margin-top: 16px; justify-content: center" :current-page="page" :page-size="20" :total="total" layout="prev, pager, next" @current-change="p => { page = p; fetchData() }" />
 
     <el-drawer v-model="detailVisible" title="通知详情" size="50%">
       <h3>{{ detail.title }}</h3>
-      <div style="color: #999; margin: 8px 0">发布时间：{{ detail.created_at?.substring(0, 10) }}</div>
+      <div style="color: #9CA3AF; margin: 8px 0">发布时间：{{ detail.created_at?.substring(0, 10) }}</div>
       <el-divider />
       <div style="white-space: pre-wrap; line-height: 1.8">{{ detail.content }}</div>
     </el-drawer>
@@ -97,6 +97,6 @@ onMounted(() => fetchData())
 </script>
 
 <style scoped>
-.notice-item { padding: 16px; border: 1px solid #f0f0f0; border-radius: 8px; margin-bottom: 12px; cursor: pointer; transition: all 0.3s; }
-.notice-item:hover { border-color: #1890ff; box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1); }
+.notice-item { padding: 16px; border: 1px solid #f3f4f6; border-radius: 12px; margin-bottom: 12px; cursor: pointer; transition: all 0.3s; }
+.notice-item:hover { border-color: #D97706; box-shadow: 0 2px 8px rgba(217, 119, 6, 0.08); }
 </style>

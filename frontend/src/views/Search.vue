@@ -14,7 +14,7 @@
     </div>
 
     <div v-if="searched">
-      <div style="margin-bottom: 16px; color: #999">共找到 {{ total }} 条结果</div>
+      <div style="margin-bottom: 16px; color: #9CA3AF">共找到 {{ total }} 条结果</div>
       <div v-for="item in results" :key="item.chunk_id" class="result-item" @click="viewDoc(item.document_id)">
         <div class="result-title">
           <el-tag size="small" style="margin-right: 8px">{{ categoryLabel(item.category) }}</el-tag>
@@ -62,9 +62,9 @@ function viewDoc(docId) {
 </script>
 
 <style scoped>
-.result-item { padding: 16px; border: 1px solid #f0f0f0; border-radius: 8px; margin-bottom: 12px; cursor: pointer; transition: all 0.3s; }
-.result-item:hover { border-color: #1890ff; box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1); }
-.result-title { font-size: 16px; font-weight: 600; color: #333; margin-bottom: 8px; }
-.result-content { color: #666; font-size: 14px; line-height: 1.6; }
+.result-item { padding: 16px; border: 1px solid #f3f4f6; border-radius: 12px; margin-bottom: 12px; cursor: pointer; transition: all 0.3s; }
+.result-item:hover { border-color: #D97706; box-shadow: 0 2px 8px rgba(217, 119, 6, 0.08); }
+.result-title { font-size: 16px; font-weight: 600; color: #111827; margin-bottom: 8px; }
+.result-content { color: #6B7280; font-size: 14px; line-height: 1.6; }
 .result-content :deep(em) { color: #f5222d; font-style: normal; font-weight: 600; }
 </style>

@@ -3,13 +3,13 @@
     <el-row :gutter="20">
       <el-col :span="12">
         <el-card>
-          <template #header><span style="font-weight: 700">问答量趋势</span></template>
+          <template #header><span style="font-weight: 600; color: #111827">问答量趋势</span></template>
           <div ref="trendChart" style="height: 350px"></div>
         </el-card>
       </el-col>
       <el-col :span="12">
         <el-card>
-          <template #header><span style="font-weight: 700">咨询类别分布</span></template>
+          <template #header><span style="font-weight: 600; color: #111827">咨询类别分布</span></template>
           <div ref="categoryChart" style="height: 350px"></div>
         </el-card>
       </el-col>
@@ -17,13 +17,13 @@
     <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
         <el-card>
-          <template #header><span style="font-weight: 700">高频问题排行</span></template>
+          <template #header><span style="font-weight: 600; color: #111827">高频问题排行</span></template>
           <div ref="faqChart" style="height: 350px"></div>
         </el-card>
       </el-col>
       <el-col :span="12">
         <el-card>
-          <template #header><span style="font-weight: 700">工单状态分布</span></template>
+          <template #header><span style="font-weight: 600; color: #111827">工单状态分布</span></template>
           <div ref="ticketChart" style="height: 350px"></div>
         </el-card>
       </el-col>
@@ -60,14 +60,14 @@ async function initTrendChart() {
       tooltip: { trigger: 'axis' },
       xAxis: { type: 'category', data: trend.map(t => t.date) },
       yAxis: { type: 'value' },
-      series: [{ data: trend.map(t => t.count), type: 'line', smooth: true, areaStyle: { opacity: 0.3 }, itemStyle: { color: '#1890ff' } }]
+      series: [{ data: trend.map(t => t.count), type: 'line', smooth: true, areaStyle: { opacity: 0.3 }, itemStyle: { color: '#D97706' } }]
     })
   } catch (e) {
     chart.setOption({
       tooltip: { trigger: 'axis' },
       xAxis: { type: 'category', data: ['1月', '2月', '3月', '4月', '5月', '6月'] },
       yAxis: { type: 'value' },
-      series: [{ data: [120, 200, 150, 80, 70, 110], type: 'line', smooth: true, areaStyle: { opacity: 0.3 }, itemStyle: { color: '#1890ff' } }]
+      series: [{ data: [120, 200, 150, 80, 70, 110], type: 'line', smooth: true, areaStyle: { opacity: 0.3 }, itemStyle: { color: '#D97706' } }]
     })
   }
 }
@@ -99,14 +99,14 @@ async function initFaqChart() {
       tooltip: {},
       xAxis: { type: 'value' },
       yAxis: { type: 'category', data: faqs.map(f => f.question.substring(0, 10) + '...').reverse() },
-      series: [{ type: 'bar', data: faqs.map(f => f.view_count).reverse(), itemStyle: { color: '#52c41a' } }]
+      series: [{ type: 'bar', data: faqs.map(f => f.view_count).reverse(), itemStyle: { color: '#059669' } }]
     })
   } catch (e) {
     chart.setOption({
       tooltip: {},
       xAxis: { type: 'value' },
       yAxis: { type: 'category', data: ['年假计算', '请假流程', '报销流程', '加班调休', '绩效申诉'] },
-      series: [{ type: 'bar', data: [150, 120, 100, 80, 60], itemStyle: { color: '#52c41a' } }]
+      series: [{ type: 'bar', data: [150, 120, 100, 80, 60], itemStyle: { color: '#059669' } }]
     })
   }
 }

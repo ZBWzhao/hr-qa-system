@@ -1,6 +1,6 @@
 <template>
   <el-card>
-    <template #header><span style="font-weight: 700">知识缺口分析</span></template>
+    <template #header><span style="font-weight: 600; color: #111827">知识缺口分析</span></template>
     <el-row :gutter="20" style="margin-bottom: 20px">
       <el-col :span="8">
         <el-statistic title="总未命中数" :value="stats.total || 0" />

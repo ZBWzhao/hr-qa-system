@@ -1,6 +1,6 @@
 <template>
   <el-card>
-    <template #header><span style="font-weight: 700">反馈纠错</span></template>
+    <template #header><span style="font-weight: 600; color: #111827">反馈纠错</span></template>
     <el-table :data="feedbacks" v-loading="loading" stripe>
       <el-table-column prop="feedback_type" label="类型" width="100">
         <template #default="{ row }"><el-tag :type="row.feedback_type === 'useful' ? 'success' : 'danger'" size="small">{{ row.feedback_type === 'useful' ? '有用' : '无用' }}</el-tag></template>
