@@ -1,0 +1,216 @@
+CREATE DATABASE IF NOT EXISTS hr_copilot DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+USE hr_copilot;
+
+CREATE TABLE IF NOT EXISTS sys_department (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    parent_id INT DEFAULT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_id) REFERENCES sys_department(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sys_user (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(128) NOT NULL,
+    real_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) DEFAULT NULL,
+    department_id INT DEFAULT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'employee',
+    status SMALLINT NOT NULL DEFAULT 1,
+    hire_date DATETIME DEFAULT NULL,
+    contract_end_date DATETIME DEFAULT NULL,
+    probation_end_date DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (department_id) REFERENCES sys_department(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS hr_document (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    category VARCHAR(50) NOT NULL DEFAULT 'other',
+    file_path VARCHAR(500) DEFAULT NULL,
+    file_type VARCHAR(20) DEFAULT NULL,
+    content_text LONGTEXT DEFAULT NULL,
+    version VARCHAR(20) NOT NULL DEFAULT '1.0',
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    uploader_id INT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (uploader_id) REFERENCES sys_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS hr_document_version (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    document_id INT NOT NULL,
+    version VARCHAR(20) NOT NULL,
+    file_path VARCHAR(500) DEFAULT NULL,
+    content_text LONGTEXT DEFAULT NULL,
+    created_by INT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (document_id) REFERENCES hr_document(id),
+    FOREIGN KEY (created_by) REFERENCES sys_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS hr_document_chunk (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    document_id INT NOT NULL,
+    chunk_index INT NOT NULL,
+    content TEXT NOT NULL,
+    keywords VARCHAR(500) DEFAULT NULL,
+    vector_mock TEXT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (document_id) REFERENCES hr_document(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS qa_record (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    answer_type VARCHAR(20) NOT NULL DEFAULT 'rag',
+    source_docs TEXT DEFAULT NULL,
+    feedback SMALLINT DEFAULT NULL,
+    is_favorite SMALLINT NOT NULL DEFAULT 0,
+    conversation_id VARCHAR(64) DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES sys_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS qa_faq (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    question VARCHAR(500) NOT NULL,
+    answer TEXT NOT NULL,
+    category VARCHAR(50) DEFAULT NULL,
+    keywords VARCHAR(500) DEFAULT NULL,
+    view_count INT NOT NULL DEFAULT 0,
+    sort_order INT NOT NULL DEFAULT 0,
+    status SMALLINT NOT NULL DEFAULT 1,
+    created_by INT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES sys_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS qa_rule (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    trigger_keywords VARCHAR(500) NOT NULL,
+    answer_template TEXT NOT NULL,
+    category VARCHAR(50) DEFAULT NULL,
+    priority INT NOT NULL DEFAULT 0,
+    status SMALLINT NOT NULL DEFAULT 1,
+    created_by INT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES sys_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS qa_feedback (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    record_id INT NOT NULL,
+    user_id INT NOT NULL,
+    feedback_type VARCHAR(20) NOT NULL,
+    correction_text TEXT DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    handler_id INT DEFAULT NULL,
+    handle_note TEXT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    handled_at DATETIME DEFAULT NULL,
+    FOREIGN KEY (record_id) REFERENCES qa_record(id),
+    FOREIGN KEY (user_id) REFERENCES sys_user(id),
+    FOREIGN KEY (handler_id) REFERENCES sys_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sys_notice (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    content TEXT NOT NULL,
+    notice_type VARCHAR(20) NOT NULL DEFAULT 'general',
+    is_pinned SMALLINT NOT NULL DEFAULT 0,
+    publisher_id INT NOT NULL,
+    expire_at DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (publisher_id) REFERENCES sys_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sys_notice_read (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    notice_id INT NOT NULL,
+    user_id INT NOT NULL,
+    read_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (notice_id) REFERENCES sys_notice(id),
+    FOREIGN KEY (user_id) REFERENCES sys_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS biz_ticket (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    ticket_no VARCHAR(50) UNIQUE NOT NULL,
+    type VARCHAR(30) NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    description TEXT DEFAULT NULL,
+    attachments TEXT DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    creator_id INT NOT NULL,
+    assignee_id INT DEFAULT NULL,
+    resolve_note TEXT DEFAULT NULL,
+    resolved_at DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (creator_id) REFERENCES sys_user(id),
+    FOREIGN KEY (assignee_id) REFERENCES sys_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS biz_comment (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    target_type VARCHAR(20) NOT NULL,
+    target_id INT NOT NULL,
+    user_id INT NOT NULL,
+    content TEXT NOT NULL,
+    parent_id INT DEFAULT NULL,
+    like_count INT NOT NULL DEFAULT 0,
+    is_adopted SMALLINT NOT NULL DEFAULT 0,
+    status SMALLINT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES sys_user(id),
+    FOREIGN KEY (parent_id) REFERENCES biz_comment(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS biz_reminder_rule (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    rule_type VARCHAR(30) NOT NULL,
+    trigger_days INT NOT NULL DEFAULT 30,
+    target_role VARCHAR(20) DEFAULT NULL,
+    channels VARCHAR(100) DEFAULT 'site',
+    template TEXT DEFAULT NULL,
+    is_active SMALLINT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS biz_reminder_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    rule_id INT NOT NULL,
+    user_id INT NOT NULL,
+    message TEXT NOT NULL,
+    channel VARCHAR(20) NOT NULL DEFAULT 'site',
+    status VARCHAR(20) NOT NULL DEFAULT 'sent',
+    sent_at DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (rule_id) REFERENCES biz_reminder_rule(id),
+    FOREIGN KEY (user_id) REFERENCES sys_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS qa_miss (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT DEFAULT NULL,
+    question TEXT NOT NULL,
+    cluster_id INT DEFAULT NULL,
+    resolved SMALLINT NOT NULL DEFAULT 0,
+    resolved_doc_id INT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES sys_user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
