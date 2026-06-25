@@ -2,7 +2,7 @@
   <div class="chat-container">
     <div class="chat-messages" ref="messagesRef">
       <div class="welcome" v-if="messages.length === 0">
-        <el-icon :size="60" color="#1890ff"><ChatDotRound /></el-icon>
+        <el-icon :size="60" color="#D97706"><ChatDotRound /></el-icon>
         <h2>HR 智能助手</h2>
         <p>您好！我是公司HR制度智能问答助手，可以回答关于公司制度、考勤、休假、薪酬等问题。</p>
         <div class="quick-questions">
@@ -10,14 +10,14 @@
         </div>
       </div>
       <div v-for="(msg, idx) in messages" :key="idx" :class="['message', msg.role]">
-        <el-avatar v-if="msg.role === 'user'" :size="36" style="background: #1890ff">{{ userStore.userInfo.real_name?.[0] || 'U' }}</el-avatar>
-        <el-avatar v-else :size="36" style="background: #52c41a"><ChatDotRound /></el-avatar>
+        <el-avatar v-if="msg.role === 'user'" :size="36" style="background: #D97706; color: #fff">{{ userStore.userInfo.real_name?.[0] || 'U' }}</el-avatar>
+        <el-avatar v-else :size="36" style="background: #D97706; color: #fff"><ChatDotRound /></el-avatar>
         <div class="message-content">
           <div class="message-bubble" :class="msg.role">
             <div v-html="formatMessage(msg.content)"></div>
           </div>
           <div v-if="msg.role === 'assistant' && msg.source_docs?.length" class="source-docs">
-            <el-divider content-position="left"><span style="font-size: 12px; color: #999">引用来源</span></el-divider>
+            <el-divider content-position="left"><span style="font-size: 12px; color: #9CA3AF">引用来源</span></el-divider>
             <el-tag v-for="(doc, i) in msg.source_docs" :key="i" size="small" type="info" style="margin: 2px">{{ doc.title || doc.question || '来源' + (i+1) }}</el-tag>
           </div>
           <div v-if="msg.role === 'assistant' && msg.record_id" class="message-actions">
@@ -32,7 +32,7 @@
         </div>
       </div>
       <div v-if="loading" class="message assistant">
-        <el-avatar :size="36" style="background: #52c41a"><ChatDotRound /></el-avatar>
+        <el-avatar :size="36" style="background: #D97706; color: #fff"><ChatDotRound /></el-avatar>
         <div class="message-content">
           <div class="message-bubble assistant loading-bubble">
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
@@ -212,25 +212,25 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.chat-container { display: flex; flex-direction: column; height: calc(100vh - 120px); background: #fff; border-radius: 8px; overflow: hidden; }
-.chat-messages { flex: 1; overflow-y: auto; padding: 20px; }
-.welcome { text-align: center; padding: 60px 20px; }
-.welcome h2 { margin: 16px 0 8px; color: #333; }
-.welcome p { color: #999; margin-bottom: 20px; }
+.chat-container { display: flex; flex-direction: column; height: calc(100vh - 120px); background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 24px; }
+.welcome { text-align: center; padding: 80px 20px; }
+.welcome h2 { margin: 16px 0 8px; color: #111827; font-weight: 700; letter-spacing: -0.3px; }
+.welcome p { color: #9CA3AF; margin-bottom: 24px; font-size: 15px; }
 .quick-questions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.message { display: flex; gap: 12px; margin-bottom: 20px; }
+.message { display: flex; gap: 12px; margin-bottom: 24px; }
 .message.user { flex-direction: row-reverse; }
 .message-content { max-width: 70%; }
-.message-bubble { padding: 12px 16px; border-radius: 12px; line-height: 1.6; font-size: 14px; }
-.message-bubble.user { background: #1890ff; color: #fff; border-top-right-radius: 4px; }
-.message-bubble.assistant { background: #f5f5f5; color: #333; border-top-left-radius: 4px; }
+.message-bubble { padding: 14px 18px; border-radius: 16px; line-height: 1.7; font-size: 14px; }
+.message-bubble.user { background: #D97706; color: #fff; border-top-right-radius: 4px; }
+.message-bubble.assistant { background: #f9fafb; color: #111827; border-top-left-radius: 4px; border: 1px solid #f3f4f6; }
 .message-actions { margin-top: 8px; display: flex; gap: 8px; }
 .source-docs { margin-top: 8px; }
 .loading-bubble { display: flex; gap: 6px; align-items: center; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: #999; animation: bounce 1.4s infinite ease-in-out both; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #D97706; opacity: 0.4; animation: bounce 1.4s infinite ease-in-out both; }
 .dot:nth-child(1) { animation-delay: -0.32s; }
 .dot:nth-child(2) { animation-delay: -0.16s; }
 @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
-.chat-input { padding: 16px; border-top: 1px solid #e8e8e8; }
+.chat-input { padding: 16px 20px; border-top: 1px solid #f3f4f6; }
 .input-toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
 </style>

@@ -15,7 +15,7 @@
       </el-col>
     </el-row>
     <el-card>
-      <template #header><span style="font-weight: 700">ROI分析报告</span></template>
+      <template #header><span style="font-weight: 600; color: #111827">ROI分析报告</span></template>
       <el-descriptions :column="2" border>
         <el-descriptions-item label="总问答量">{{ report.total_qa }}</el-descriptions-item>
         <el-descriptions-item label="本月问答量">{{ report.month_qa }}</el-descriptions-item>
@@ -25,7 +25,7 @@
         <el-descriptions-item label="本月节省工时">{{ report.month_saved_hours }} 小时</el-descriptions-item>
       </el-descriptions>
       <el-divider />
-      <div style="padding: 16px; background: #f6ffed; border-radius: 8px; color: #52c41a; font-size: 16px">{{ report.report_summary }}</div>
+      <div style="padding: 16px; background: #ECFDF5; border-radius: 12px; color: #059669; font-size: 16px">{{ report.report_summary }}</div>
       <div ref="roiChart" style="height: 300px; margin-top: 20px"></div>
     </el-card>
   </div>
@@ -52,7 +52,7 @@ onMounted(async () => {
     tooltip: { trigger: 'axis' },
     xAxis: { type: 'category', data: trend.map(t => t.date) },
     yAxis: { type: 'value', name: '问答量' },
-    series: [{ data: trend.map(t => t.count), type: 'bar', itemStyle: { color: '#1890ff' } }]
+    series: [{ data: trend.map(t => t.count), type: 'bar', itemStyle: { color: '#D97706' } }]
   })
 })
 </script>

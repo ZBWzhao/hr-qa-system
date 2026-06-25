@@ -1,11 +1,11 @@
 <template>
   <el-card>
-    <template #header><span style="font-weight: 700">到期提醒</span></template>
+    <template #header><span style="font-weight: 600; color: #111827">到期提醒</span></template>
     <div v-for="(r, idx) in reminders" :key="idx" class="reminder-item">
-      <el-icon :size="20" :color="r.urgent ? '#f56c6c' : '#e6a23c'" style="margin-right: 12px"><AlarmClock /></el-icon>
+      <el-icon :size="20" :color="r.urgent ? '#DC2626' : '#D97706'" style="margin-right: 12px"><AlarmClock /></el-icon>
       <div style="flex: 1">
         <div>{{ r.message }}</div>
-        <div style="color: #999; font-size: 12px; margin-top: 4px">类型：{{ typeLabel(r.type) }} | 日期：{{ r.date }}</div>
+        <div style="color: #9CA3AF; font-size: 12px; margin-top: 4px">类型：{{ typeLabel(r.type) }} | 日期：{{ r.date }}</div>
       </div>
       <el-tag v-if="r.urgent" type="danger" size="small">紧急</el-tag>
     </div>
@@ -81,5 +81,5 @@ onMounted(() => fetchData())
 </script>
 
 <style scoped>
-.reminder-item { display: flex; align-items: flex-start; padding: 16px; border: 1px solid #f0f0f0; border-radius: 8px; margin-bottom: 12px; }
+.reminder-item { display: flex; align-items: flex-start; padding: 16px; border: 1px solid #f3f4f6; border-radius: 12px; margin-bottom: 12px; }
 </style>

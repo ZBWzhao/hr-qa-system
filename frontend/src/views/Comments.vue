@@ -1,6 +1,6 @@
 <template>
   <el-card>
-    <template #header><span style="font-weight: 700">评论讨论</span></template>
+    <template #header><span style="font-weight: 600; color: #111827">评论讨论</span></template>
 
     <div style="display: flex; gap: 12px; margin-bottom: 20px">
       <el-select v-model="targetType" placeholder="选择类型" style="width: 120px" @change="fetchComments">
@@ -17,20 +17,20 @@
       <el-button type="primary" style="margin-top: 8px" @click="submitComment" :disabled="!newComment.trim()">发表评论</el-button>
     </div>
 
-    <div v-if="!targetId" style="text-align: center; padding: 40px; color: #999">
+    <div v-if="!targetId" style="text-align: center; padding: 40px; color: #9CA3AF">
       请选择FAQ或文档后查看评论
     </div>
 
     <div v-for="comment in comments" :key="comment.id" class="comment-item">
       <div style="display: flex; justify-content: space-between; align-items: center">
         <div style="display: flex; align-items: center; gap: 8px">
-          <el-avatar :size="32" style="background: #1890ff">U</el-avatar>
+          <el-avatar :size="32" style="background: #D97706; color: #fff">U</el-avatar>
           <span style="font-weight: 500">用户 {{ comment.user_id }}</span>
           <el-tag v-if="comment.is_adopted" type="success" size="small">已采纳</el-tag>
         </div>
-        <span style="color: #999; font-size: 12px">{{ comment.created_at?.substring(0, 16) }}</span>
+        <span style="color: #9CA3AF; font-size: 12px">{{ comment.created_at?.substring(0, 16) }}</span>
       </div>
-      <div style="margin: 10px 0; line-height: 1.6; color: #333">{{ comment.content }}</div>
+      <div style="margin: 10px 0; line-height: 1.6; color: #374151">{{ comment.content }}</div>
       <div style="display: flex; gap: 16px; align-items: center">
         <el-button text size="small" @click="handleLike(comment)">
           <el-icon style="margin-right: 4px"><Star /></el-icon>
@@ -47,10 +47,10 @@
         <div v-for="reply in comment.replies" :key="reply.id" class="reply-item">
           <div style="display: flex; justify-content: space-between; align-items: center">
             <div style="display: flex; align-items: center; gap: 8px">
-              <el-avatar :size="24" style="background: #52c41a; font-size: 12px">R</el-avatar>
+              <el-avatar :size="24" style="background: #059669; font-size: 12px; color: #fff">R</el-avatar>
               <span style="font-size: 13px">用户 {{ reply.user_id }}</span>
             </div>
-            <span style="color: #999; font-size: 12px">{{ reply.created_at?.substring(0, 16) }}</span>
+            <span style="color: #9CA3AF; font-size: 12px">{{ reply.created_at?.substring(0, 16) }}</span>
           </div>
           <div style="margin: 6px 0; font-size: 13px; color: #555">{{ reply.content }}</div>
           <div style="display: flex; gap: 12px">
@@ -171,13 +171,13 @@ onMounted(() => fetchOptions())
 <style scoped>
 .comment-item {
   padding: 16px;
-  border: 1px solid #f0f0f0;
-  border-radius: 8px;
+  border: 1px solid #f3f4f6;
+  border-radius: 12px;
   margin-bottom: 12px;
 }
 .reply-item {
   padding: 10px;
-  border-left: 3px solid #e8e8e8;
+  border-left: 3px solid #e5e7eb;
   margin-bottom: 8px;
   background: #fafafa;
   border-radius: 4px;

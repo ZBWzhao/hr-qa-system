@@ -1,6 +1,6 @@
 <template>
   <el-card>
-    <template #header><span style="font-weight: 700">个人信息</span></template>
+    <template #header><span style="font-weight: 600; color: #111827">个人信息</span></template>
     <el-form :model="form" label-width="80px" style="max-width: 500px">
       <el-form-item label="工号">
         <el-input :value="userStore.userInfo.username" disabled />

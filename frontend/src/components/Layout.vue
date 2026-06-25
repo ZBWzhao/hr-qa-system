@@ -1,18 +1,19 @@
 <template>
   <el-container style="height: 100vh">
-    <el-aside :width="isCollapse ? '64px' : '220px'" style="transition: width 0.3s; background: #001529">
-      <div class="logo" :style="{ padding: isCollapse ? '16px 8px' : '16px 20px' }">
-        <el-icon :size="24" color="#1890ff"><ChatDotRound /></el-icon>
+    <el-aside :width="isCollapse ? '64px' : '220px'" class="sidebar">
+      <div class="logo" :style="{ padding: isCollapse ? '20px 8px' : '20px 20px' }">
+        <el-icon :size="22" color="#D97706"><ChatDotRound /></el-icon>
         <span v-if="!isCollapse" class="logo-text">HR Copilot</span>
       </div>
       <el-menu
         :default-active="$route.path"
         :collapse="isCollapse"
-        background-color="#001529"
-        text-color="#ffffffb3"
-        active-text-color="#1890ff"
+        background-color="transparent"
+        text-color="#6B7280"
+        active-text-color="#D97706"
         router
         :collapse-transition="false"
+        class="sidebar-menu"
       >
         <el-menu-item index="/dashboard">
           <el-icon><HomeFilled /></el-icon>
@@ -85,18 +86,18 @@
       </el-menu>
     </el-aside>
     <el-container>
-      <el-header style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e8e8e8; background: #fff; padding: 0 20px">
+      <el-header class="top-header">
         <div style="display: flex; align-items: center">
-          <el-icon :size="20" style="cursor: pointer" @click="isCollapse = !isCollapse"><Fold v-if="!isCollapse" /><Expand v-else /></el-icon>
+          <el-icon :size="20" style="cursor: pointer; color: #6B7280" @click="isCollapse = !isCollapse"><Fold v-if="!isCollapse" /><Expand v-else /></el-icon>
           <el-breadcrumb separator="/" style="margin-left: 16px">
             <el-breadcrumb-item>{{ $route.meta.title || '首页' }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
         <el-dropdown trigger="click">
           <span style="cursor: pointer; display: flex; align-items: center">
-            <el-avatar :size="32" style="background: #1890ff">{{ userStore.userInfo.real_name?.[0] || 'U' }}</el-avatar>
-            <span style="margin-left: 8px">{{ userStore.userInfo.real_name || '用户' }}</span>
-            <el-icon style="margin-left: 4px"><ArrowDown /></el-icon>
+            <el-avatar :size="32" style="background: #D97706; color: #fff">{{ userStore.userInfo.real_name?.[0] || 'U' }}</el-avatar>
+            <span style="margin-left: 8px; color: #374151">{{ userStore.userInfo.real_name || '用户' }}</span>
+            <el-icon style="margin-left: 4px; color: #9CA3AF"><ArrowDown /></el-icon>
           </span>
           <template #dropdown>
             <el-dropdown-menu>
@@ -106,7 +107,7 @@
           </template>
         </el-dropdown>
       </el-header>
-      <el-main style="background: #f0f2f5; padding: 20px">
+      <el-main class="main-content">
         <router-view />
       </el-main>
     </el-container>
@@ -121,7 +122,7 @@ import { getUnreadCount } from '../api/notices'
 
 const router = useRouter()
 const userStore = useUserStore()
-const isCollapse = ref(false)
+const isCollapse = ref(true)
 const unreadCount = ref(0)
 
 async function fetchUnread() {
@@ -142,23 +143,62 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.sidebar {
+  background: #ffffff;
+  border-right: 1px solid #f3f4f6;
+  transition: width 0.3s;
+}
 .logo {
   display: flex;
   align-items: center;
-  height: 48px;
+  height: 56px;
   gap: 10px;
+  border-bottom: 1px solid #f3f4f6;
 }
 .logo-text {
-  color: #fff;
-  font-size: 18px;
+  color: #111827;
+  font-size: 17px;
   font-weight: 700;
   white-space: nowrap;
+  letter-spacing: -0.3px;
+}
+.sidebar-menu {
+  padding: 8px;
+}
+.sidebar-menu .el-menu-item,
+.sidebar-menu :deep(.el-sub-menu__title) {
+  border-radius: 8px;
+  margin-bottom: 2px;
+  height: 40px;
+  line-height: 40px;
+}
+.sidebar-menu .el-menu-item:hover,
+.sidebar-menu :deep(.el-sub-menu__title:hover) {
+  background-color: #f9fafb;
+}
+.sidebar-menu .el-menu-item.is-active {
+  background-color: #FFF7ED;
+  color: #D97706;
+  font-weight: 500;
 }
 .notice-badge {
   position: absolute;
   right: 20px;
   top: 50%;
   transform: translateY(-50%);
+}
+.top-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f3f4f6;
+  background: #ffffff;
+  padding: 0 24px;
+  height: 56px;
+}
+.main-content {
+  background: #fafafa;
+  padding: 24px;
 }
 @media (max-width: 768px) {
   .logo-text { display: none; }

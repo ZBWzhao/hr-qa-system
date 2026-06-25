@@ -1,6 +1,6 @@
 <template>
   <el-card>
-    <template #header><span style="font-weight: 700">入职引导</span></template>
+    <template #header><span style="font-weight: 600; color: #111827">入职引导</span></template>
     <el-alert v-if="data.is_new_employee" title="欢迎加入公司！以下是您的入职学习清单，请认真阅读相关制度文档。" type="success" :closable="false" style="margin-bottom: 20px" />
     <el-alert v-else title="您已完成入职引导期，以下为公司制度文档，可随时查阅。" type="info" :closable="false" style="margin-bottom: 20px" />
 
@@ -16,9 +16,9 @@
     </el-table>
 
     <h4 style="margin: 24px 0 16px">常见入职问题</h4>
-    <div v-for="(faq, idx) in data.faqs" :key="idx" style="padding: 12px 0; border-bottom: 1px solid #f0f0f0">
-      <div style="font-weight: 500; color: #333">{{ faq.question }}</div>
-      <div style="color: #999; font-size: 12px; margin-top: 4px">分类：{{ faq.category }}</div>
+    <div v-for="(faq, idx) in data.faqs" :key="idx" style="padding: 12px 0; border-bottom: 1px solid #f3f4f6">
+      <div style="font-weight: 500; color: #374151">{{ faq.question }}</div>
+      <div style="color: #9CA3AF; font-size: 12px; margin-top: 4px">分类：{{ faq.category }}</div>
     </div>
   </el-card>
 </template>

@@ -2,7 +2,7 @@
   <el-card>
     <template #header>
       <div style="display: flex; justify-content: space-between; align-items: center">
-        <span style="font-weight: 700">FAQ 管理</span>
+        <span style="font-weight: 600; color: #111827">FAQ 管理</span>
         <el-button v-if="userStore.isHR" type="primary" @click="showDialog()">新增FAQ</el-button>
       </div>
     </template>
@@ -59,7 +59,7 @@
       <h3>{{ detail.question }}</h3>
       <el-divider />
       <div style="white-space: pre-wrap; line-height: 1.8">{{ detail.answer }}</div>
-      <div style="margin-top: 16px; color: #999">浏览次数：{{ detail.view_count }}</div>
+      <div style="margin-top: 16px; color: #9CA3AF">浏览次数：{{ detail.view_count }}</div>
     </el-drawer>
   </el-card>
 </template>
