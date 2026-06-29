@@ -13,7 +13,7 @@ export function createDocument(formData) {
 }
 
 export function updateDocument(docId, formData) {
-  return request.put(`/documents/${docId}`, formData)
+  return request.put(`/documents/${docId}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
 export function deleteDocument(docId) {

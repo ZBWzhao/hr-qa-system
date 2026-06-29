@@ -19,11 +19,14 @@ request.interceptors.response.use(
   response => {
     const res = response.data
     if (res.code !== 0) {
-      ElMessage.error(res.message || '请求失败')
       if (res.code === 401) {
         localStorage.removeItem('token')
         localStorage.removeItem('user')
         router.push('/login')
+      } else if (res.code === 403) {
+        // 403 静默处理，不弹 toast（后台请求不应打扰用户）
+      } else {
+        ElMessage.error(res.message || '请求失败')
       }
       return Promise.reject(new Error(res.message))
     }
@@ -36,7 +39,7 @@ request.interceptors.response.use(
         localStorage.removeItem('user')
         router.push('/login')
       } else if (error.response.status === 403) {
-        ElMessage.error('权限不足')
+        // 403 静默处理，不弹 toast
       } else {
         ElMessage.error(error.response.data?.message || '网络错误')
       }

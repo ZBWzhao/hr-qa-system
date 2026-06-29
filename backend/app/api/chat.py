@@ -201,7 +201,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
         user_id=current_user.id,
         question=question,
         answer=answer,
-        answer_type="mock",
+        answer_type="miss",
         source_docs=json.dumps([]),
         conversation_id=conv_id
     )
@@ -210,7 +210,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     db.refresh(record)
     return success({
         "answer": answer,
-        "answer_type": "mock",
+        "answer_type": "miss",
         "source_docs": [],
         "record_id": record.id,
         "conversation_id": conv_id

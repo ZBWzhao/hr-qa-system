@@ -11,24 +11,30 @@
       <el-select v-model="category" placeholder="全部分类" clearable @change="fetchData">
         <el-option label="考勤" value="attendance" />
         <el-option label="薪酬" value="salary" />
+        <el-option label="福利" value="benefit" />
         <el-option label="休假" value="leave" />
         <el-option label="绩效" value="performance" />
-        <el-option label="入职" value="other" />
+        <el-option label="入职/其他" value="other" />
       </el-select>
     </div>
     <el-table :data="faqs" v-loading="loading" stripe>
-      <el-table-column prop="question" label="问题" min-width="250" />
+      <el-table-column prop="question" label="问题" min-width="200" show-overflow-tooltip />
       <el-table-column prop="category" label="分类" width="100">
-        <template #default="{ row }"><el-tag size="small">{{ row.category || '—' }}</el-tag></template>
+        <template #default="{ row }"><el-tag size="small">{{ categoryLabel(row.category) }}</el-tag></template>
+      </el-table-column>
+      <el-table-column prop="keywords" label="关键词" min-width="150" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.keywords || '—' }}</template>
       </el-table-column>
       <el-table-column prop="view_count" label="浏览次数" width="100" sortable />
-      <el-table-column label="操作" :width="userStore.isHR ? 180 : 80">
+      <el-table-column label="操作" :width="userStore.isHR ? 220 : 80" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" @click="viewFaq(row)">查看</el-button>
-          <template v-if="userStore.isHR">
-            <el-button size="small" type="primary" @click="showDialog(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
-          </template>
+          <div style="display: flex; flex-wrap: nowrap; gap: 4px">
+            <el-button size="small" @click="viewFaq(row)">查看</el-button>
+            <template v-if="userStore.isHR">
+              <el-button size="small" type="primary" @click="showDialog(row)">编辑</el-button>
+              <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            </template>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -42,9 +48,10 @@
           <el-select v-model="form.category">
             <el-option label="考勤" value="attendance" />
             <el-option label="薪酬" value="salary" />
+            <el-option label="福利" value="benefit" />
             <el-option label="休假" value="leave" />
             <el-option label="绩效" value="performance" />
-            <el-option label="入职" value="other" />
+            <el-option label="入职/其他" value="other" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键词"><el-input v-model="form.keywords" placeholder="用逗号分隔" /></el-form-item>
@@ -59,7 +66,12 @@
       <h3>{{ detail.question }}</h3>
       <el-divider />
       <div style="white-space: pre-wrap; line-height: 1.8">{{ detail.answer }}</div>
-      <div style="margin-top: 16px; color: #9CA3AF">浏览次数：{{ detail.view_count }}</div>
+      <el-divider />
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="分类">{{ categoryLabel(detail.category) }}</el-descriptions-item>
+        <el-descriptions-item label="浏览次数">{{ detail.view_count }}</el-descriptions-item>
+        <el-descriptions-item label="关键词">{{ detail.keywords || '—' }}</el-descriptions-item>
+      </el-descriptions>
     </el-drawer>
   </el-card>
 </template>
@@ -67,7 +79,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getFaqs, getAllFaqs, createFaq, updateFaq, deleteFaq } from '../api/faqs'
+import { getFaqs, getAllFaqs, getFaq, createFaq, updateFaq, deleteFaq } from '../api/faqs'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
@@ -83,6 +95,10 @@ const form = reactive({ question: '', answer: '', category: 'other', keywords: '
 const detailVisible = ref(false)
 const detail = ref({})
 
+function categoryLabel(c) {
+  return { attendance: '考勤', salary: '薪酬', benefit: '福利', leave: '休假', performance: '绩效', other: '入职/其他' }[c] || c || '—'
+}
+
 async function fetchData() {
   loading.value = true
   try {
@@ -96,16 +112,21 @@ async function fetchData() {
 function showDialog(row) {
   editId.value = row?.id || null
   if (row) {
-    Object.assign(form, row)
+    Object.assign(form, { question: row.question, answer: row.answer, category: row.category || 'other', keywords: row.keywords || '' })
   } else {
     Object.assign(form, { question: '', answer: '', category: 'other', keywords: '' })
   }
   dialogVisible.value = true
 }
 
-function viewFaq(row) {
-  detail.value = row
-  detailVisible.value = true
+async function viewFaq(row) {
+  try {
+    const res = await getFaq(row.id)
+    detail.value = res.data
+    detailVisible.value = true
+    // 更新列表中的浏览次数
+    row.view_count = res.data.view_count
+  } catch (e) {}
 }
 
 async function handleSubmit() {

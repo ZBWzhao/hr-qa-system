@@ -15,15 +15,14 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
     user = register_user(db, data.username, data.password, data.real_name, data.email, data.department_id)
     if not user:
         return error("用户名已存在")
-    token_data = create_user_token(user)
-    return success(token_data)
+    return success(None, "注册申请已提交，请等待管理员审核通过后登录")
 
 
 @router.post("/login")
 def login(data: UserLogin, db: Session = Depends(get_db)):
-    user = authenticate_user(db, data.username, data.password)
+    user, err_msg = authenticate_user(db, data.username, data.password)
     if not user:
-        return error("用户名或密码错误")
+        return error(err_msg or "用户名或密码错误")
     token_data = create_user_token(user)
     return success(token_data)
 

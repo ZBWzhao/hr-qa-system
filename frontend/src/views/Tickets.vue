@@ -20,9 +20,9 @@
       </el-table-column>
       <el-table-column label="操作" width="250" v-if="userStore.isHR">
         <template #default="{ row }">
-          <el-button v-if="row.status === 'pending'" size="small" type="primary" @click="handleStatus(row, 'processing')">受理</el-button>
+          <el-button v-if="row.status === 'pending'" size="small" type="primary" @click="handleAccept(row)">受理</el-button>
           <el-button v-if="row.status === 'processing'" size="small" type="success" @click="showComplete(row)">完成</el-button>
-          <el-button v-if="row.status !== 'completed' && row.status !== 'rejected'" size="small" type="danger" @click="handleStatus(row, 'rejected')">驳回</el-button>
+          <el-button v-if="row.status !== 'completed' && row.status !== 'rejected'" size="small" type="danger" @click="showReject(row)">驳回</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -48,11 +48,21 @@
 
     <el-dialog v-model="completeVisible" title="完成工单" width="500px">
       <el-form label-width="80px">
-        <el-form-item label="处理备注"><el-input v-model="resolveNote" type="textarea" :rows="4" /></el-form-item>
+        <el-form-item label="处理备注"><el-input v-model="resolveNote" type="textarea" :rows="4" placeholder="请填写处理备注" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="completeVisible = false">取消</el-button>
         <el-button type="primary" @click="submitComplete">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="rejectVisible" title="驳回工单" width="500px">
+      <el-form label-width="80px">
+        <el-form-item label="驳回原因"><el-input v-model="rejectNote" type="textarea" :rows="4" placeholder="请填写驳回原因" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rejectVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitReject">确定驳回</el-button>
       </template>
     </el-dialog>
   </el-card>
@@ -60,7 +70,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getTickets, createTicket, updateTicket } from '../api/tickets'
 import { useUserStore } from '../stores/user'
 
@@ -72,8 +82,10 @@ const total = ref(0)
 const createVisible = ref(false)
 const createForm = reactive({ type: 'other', title: '', description: '' })
 const completeVisible = ref(false)
+const rejectVisible = ref(false)
 const currentId = ref(null)
 const resolveNote = ref('')
+const rejectNote = ref('')
 
 function typeLabel(t) { return { certify: '证明开具', info_change: '信息变更', other: '其他' }[t] || t }
 function statusType(s) { return { pending: 'warning', processing: 'primary', completed: 'success', rejected: 'danger' }[s] || '' }
@@ -97,18 +109,36 @@ async function submitCreate() {
   fetchData()
 }
 
-async function handleStatus(row, status) {
-  await updateTicket(row.id, { status })
-  ElMessage.success('操作成功')
+async function handleAccept(row) {
+  await ElMessageBox.confirm('确认受理该工单？', '提示', { type: 'info' })
+  await updateTicket(row.id, { status: 'processing' })
+  ElMessage.success('已受理')
   fetchData()
 }
 
 function showComplete(row) { currentId.value = row.id; resolveNote.value = ''; completeVisible.value = true }
 
 async function submitComplete() {
+  if (!resolveNote.value.trim()) {
+    ElMessage.warning('请填写处理备注')
+    return
+  }
   await updateTicket(currentId.value, { status: 'completed', resolve_note: resolveNote.value })
   ElMessage.success('工单已完成')
   completeVisible.value = false
+  fetchData()
+}
+
+function showReject(row) { currentId.value = row.id; rejectNote.value = ''; rejectVisible.value = true }
+
+async function submitReject() {
+  if (!rejectNote.value.trim()) {
+    ElMessage.warning('请填写驳回原因')
+    return
+  }
+  await updateTicket(currentId.value, { status: 'rejected', resolve_note: rejectNote.value })
+  ElMessage.success('工单已驳回')
+  rejectVisible.value = false
   fetchData()
 }
 

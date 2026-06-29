@@ -49,3 +49,8 @@ def root():
 @app.get(f"{settings.API_V1_PREFIX}/health")
 def health():
     return {"code": 0, "message": "ok", "data": None}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

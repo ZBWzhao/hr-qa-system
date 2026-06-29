@@ -146,7 +146,8 @@ onMounted(() => {
 .sidebar {
   background: #ffffff;
   border-right: 1px solid #f3f4f6;
-  transition: width 0.3s;
+  transition: width 0.15s ease;
+  overflow: hidden;
 }
 .logo {
   display: flex;
@@ -200,6 +201,14 @@ onMounted(() => {
   background: #fafafa;
   padding: 24px;
 }
+/* 侧边栏折叠时tooltip无延迟消失 */
+:global(.el-popper.el-menu__tooltip.is-dark) {
+  --el-popper-hide-after: 0;
+}
+:global(.el-popper.el-menu__tooltip) {
+  transition: opacity 0.08s ease-out !important;
+}
+
 @media (max-width: 768px) {
   .logo-text { display: none; }
 }

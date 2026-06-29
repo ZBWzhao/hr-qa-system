@@ -16,7 +16,7 @@ def register_user(db: Session, username: str, password: str, real_name: str, ema
         email=email,
         department_id=department_id,
         role="employee",
-        status=1
+        status=0
     )
     db.add(user)
     db.commit()
@@ -24,15 +24,22 @@ def register_user(db: Session, username: str, password: str, real_name: str, ema
     return user
 
 
-def authenticate_user(db: Session, username: str, password: str) -> User:
+def authenticate_user(db: Session, username: str, password: str):
+    """返回 (user, error_message) 元组"""
     user = db.query(User).filter(User.username == username).first()
     if not user:
-        return None
+        return None, "用户名或密码错误"
     if not verify_password(password, user.password_hash):
-        return None
+        return None, "用户名或密码错误"
+    if user.status == 0:
+        return None, "账号正在等待管理员审核"
+    if user.status == 2:
+        return None, "账号已被禁用，请联系管理员"
+    if user.status == 3:
+        return None, "注册申请未通过"
     if user.status != 1:
-        return None
-    return user
+        return None, "账号状态异常"
+    return user, None
 
 
 def create_user_token(user: User) -> dict:

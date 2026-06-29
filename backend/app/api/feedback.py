@@ -41,7 +41,24 @@ def list_feedback(status: Optional[str] = None, page: int = 1, page_size: int = 
         query = query.filter(QAFeedback.status == status)
     total = query.count()
     items = query.order_by(QAFeedback.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
-    return paginated([FeedbackOut.model_validate(f).model_dump() for f in items], total, page, page_size)
+    result = []
+    for f in items:
+        fb = FeedbackOut.model_validate(f).model_dump()
+        # 关联问答记录
+        record = db.query(QARecord).filter(QARecord.id == f.record_id).first()
+        if record:
+            fb["question"] = record.question
+            fb["answer"] = record.answer[:200] if record.answer else ""
+            fb["answer_type"] = record.answer_type
+        else:
+            fb["question"] = ""
+            fb["answer"] = ""
+            fb["answer_type"] = ""
+        # 反馈人
+        fb_user = db.query(User).filter(User.id == f.user_id).first()
+        fb["user_name"] = fb_user.real_name if fb_user else "未知"
+        result.append(fb)
+    return paginated(result, total, page, page_size)
 
 
 @router.put("/{feedback_id}/handle")
@@ -55,7 +72,15 @@ def handle_feedback(feedback_id: int, data: FeedbackHandle, current_user: User =
     feedback.handled_at = datetime.now()
     db.commit()
     db.refresh(feedback)
-    return success(FeedbackOut.model_validate(feedback).model_dump())
+    fb = FeedbackOut.model_validate(feedback).model_dump()
+    record = db.query(QARecord).filter(QARecord.id == feedback.record_id).first()
+    if record:
+        fb["question"] = record.question
+        fb["answer"] = record.answer[:200] if record.answer else ""
+        fb["answer_type"] = record.answer_type
+    fb_user = db.query(User).filter(User.id == feedback.user_id).first()
+    fb["user_name"] = fb_user.real_name if fb_user else "未知"
+    return success(fb)
 
 
 @router.get("/stats")

@@ -3,7 +3,7 @@
     <template #header>
       <div style="display: flex; justify-content: space-between; align-items: center">
         <span style="font-weight: 600; color: #111827">制度文档管理</span>
-        <el-button type="primary" @click="showDialog()">上传文档</el-button>
+        <el-button v-if="userStore.isHR" type="primary" @click="showDialog()">上传文档</el-button>
       </div>
     </template>
     <div style="display: flex; gap: 12px; margin-bottom: 16px">
@@ -15,7 +15,7 @@
         <el-option label="绩效" value="performance" />
         <el-option label="其他" value="other" />
       </el-select>
-      <el-select v-model="filters.status" placeholder="全部状态" clearable @change="fetchData">
+      <el-select v-if="userStore.isHR" v-model="filters.status" placeholder="全部状态" clearable @change="fetchData">
         <el-option label="草稿" value="draft" />
         <el-option label="已发布" value="published" />
         <el-option label="已归档" value="archived" />
@@ -28,6 +28,7 @@
           <el-tag size="small">{{ categoryLabel(row.category) }}</el-tag>
         </template>
       </el-table-column>
+      <el-table-column prop="uploader_name" label="上传人" width="100" />
       <el-table-column prop="version" label="版本" width="80" />
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
@@ -37,20 +38,26 @@
       <el-table-column prop="created_at" label="创建时间" width="120">
         <template #default="{ row }">{{ row.created_at?.substring(0, 10) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="260" fixed="right">
+      <el-table-column label="操作" :width="userStore.isHR ? 300 : 80" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" @click="viewDetail(row)">详情</el-button>
-          <el-button v-if="row.status === 'draft'" size="small" type="success" @click="handlePublish(row)">发布</el-button>
-          <el-button v-if="row.status === 'published'" size="small" type="warning" @click="handleArchive(row)">归档</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+          <div style="display: flex; flex-wrap: nowrap; gap: 4px">
+            <el-button size="small" @click="viewDetail(row)">详情</el-button>
+            <template v-if="userStore.isHR">
+              <el-button size="small" type="primary" @click="showEdit(row)">编辑</el-button>
+              <el-button v-if="row.status === 'draft'" size="small" type="success" @click="handlePublish(row)">发布</el-button>
+              <el-button v-if="row.status === 'published'" size="small" type="warning" @click="handleArchive(row)">归档</el-button>
+              <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+            </template>
+          </div>
         </template>
       </el-table-column>
     </el-table>
     <el-pagination style="margin-top: 16px; justify-content: center" :current-page="page" :page-size="20" :total="total" layout="prev, pager, next" @current-change="p => { page = p; fetchData() }" />
 
-    <el-dialog v-model="dialogVisible" :title="editId ? '编辑文档' : '上传文档'" width="600px">
+    <!-- 新增文档弹窗：文件上传 + 手动录入同时可用 -->
+    <el-dialog v-model="dialogVisible" :title="editId ? '编辑文档' : '新增文档'" width="700px">
       <el-form :model="form" label-width="80px">
-        <el-form-item label="标题"><el-input v-model="form.title" /></el-form-item>
+        <el-form-item label="标题"><el-input v-model="form.title" placeholder="留空则使用文件名" /></el-form-item>
         <el-form-item label="分类">
           <el-select v-model="form.category">
             <el-option label="考勤" value="attendance" />
@@ -61,7 +68,25 @@
             <el-option label="其他" value="other" />
           </el-select>
         </el-form-item>
-        <el-form-item label="内容"><el-input v-model="form.content_text" type="textarea" :rows="10" /></el-form-item>
+        <el-form-item label="上传文件">
+          <el-upload
+            ref="uploadRef"
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleFileChange"
+            :on-remove="handleFileRemove"
+            :on-exceed="() => ElMessage.warning('只能上传一个文件')"
+            accept=".txt,.md,.docx"
+          >
+            <el-button type="primary" size="small">选择文件</el-button>
+            <template #tip>
+              <div style="color: #9CA3AF; font-size: 12px; margin-top: 4px">支持 txt、md、docx 格式，不支持 pdf/xlsx/exe/zip（可选，与手动录入内容合并）</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="手动录入">
+          <el-input v-model="form.content_text" type="textarea" :rows="8" placeholder="可在此手动输入文档内容，与上传文件内容合并保存" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -69,15 +94,36 @@
       </template>
     </el-dialog>
 
+    <!-- 文档详情抽屉 -->
     <el-drawer v-model="detailVisible" title="文档详情" size="60%">
       <el-descriptions :column="2" border>
         <el-descriptions-item label="标题">{{ detail.title }}</el-descriptions-item>
         <el-descriptions-item label="分类">{{ categoryLabel(detail.category) }}</el-descriptions-item>
         <el-descriptions-item label="版本">{{ detail.version }}</el-descriptions-item>
         <el-descriptions-item label="状态">{{ statusLabel(detail.status) }}</el-descriptions-item>
+        <el-descriptions-item label="上传人">{{ detail.uploader_name || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="更新时间">{{ detail.updated_at?.substring(0, 19) }}</el-descriptions-item>
       </el-descriptions>
+
+      <!-- 附件信息 -->
+      <div v-if="detail.file_path" style="margin-top: 16px">
+        <h4>附件</h4>
+        <div class="attachment-item">
+          <el-icon style="margin-right: 8px; color: #D97706"><Document /></el-icon>
+          <span>{{ detail.file_path?.split('/').pop()?.split('\\').pop() || '附件' }}</span>
+          <el-tag size="small" style="margin-left: 8px" type="info">{{ detail.file_type || '未知' }}</el-tag>
+        </div>
+      </div>
+
       <el-divider />
-      <div style="white-space: pre-wrap; line-height: 1.8">{{ detail.content_text }}</div>
+      <h4>正文内容</h4>
+      <div style="white-space: pre-wrap; line-height: 1.8; max-height: 400px; overflow-y: auto">{{ detail.content_text }}</div>
+      <el-divider />
+      <h4>版本历史</h4>
+      <el-table :data="detail.versions || []" size="small" stripe>
+        <el-table-column prop="version" label="版本" width="80" />
+        <el-table-column prop="created_at" label="创建时间" width="180" />
+      </el-table>
     </el-drawer>
   </el-card>
 </template>
@@ -86,9 +132,12 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Document } from '@element-plus/icons-vue'
 import { getDocuments, createDocument, updateDocument, deleteDocument, publishDocument, archiveDocument, getDocument } from '../api/documents'
+import { useUserStore } from '../stores/user'
 
 const route = useRoute()
+const userStore = useUserStore()
 const loading = ref(false)
 const documents = ref([])
 const page = ref(1)
@@ -97,6 +146,7 @@ const filters = reactive({ category: '', status: '' })
 const dialogVisible = ref(false)
 const editId = ref(null)
 const form = reactive({ title: '', category: 'other', content_text: '' })
+const selectedFile = ref(null)
 const detailVisible = ref(false)
 const detail = ref({})
 
@@ -113,7 +163,9 @@ function statusLabel(s) {
 async function fetchData() {
   loading.value = true
   try {
-    const res = await getDocuments({ page: page.value, ...filters })
+    const params = { page: page.value, ...filters }
+    if (!userStore.isHR) delete params.status
+    const res = await getDocuments(params)
     documents.value = res.data?.items || []
     total.value = res.data?.total || 0
   } catch (e) {} finally { loading.value = false }
@@ -121,19 +173,56 @@ async function fetchData() {
 
 function showDialog() {
   editId.value = null
+  selectedFile.value = null
   Object.assign(form, { title: '', category: 'other', content_text: '' })
   dialogVisible.value = true
 }
 
+async function showEdit(row) {
+  try {
+    const res = await getDocument(row.id)
+    const doc = res.data
+    editId.value = doc.id
+    selectedFile.value = null
+    Object.assign(form, { title: doc.title, category: doc.category, content_text: doc.content_text || '' })
+    dialogVisible.value = true
+  } catch (e) {}
+}
+
+function handleFileChange(file) {
+  const ext = file.name.split('.').pop().toLowerCase()
+  if (['exe', 'zip', 'bat', 'cmd', 'sh', 'msi'].includes(ext)) {
+    ElMessage.error(`不支持上传 ${ext} 格式文件`)
+    return false
+  }
+  if (['pdf', 'xlsx', 'xls'].includes(ext)) {
+    ElMessage.warning('暂不支持解析该格式，请使用 txt/md/docx 或手动录入')
+    return false
+  }
+  if (file.size === 0) {
+    ElMessage.warning('文件内容为空')
+    return false
+  }
+  selectedFile.value = file.raw
+  if (!form.title) {
+    form.title = file.name.replace(/\.[^.]+$/, '')
+  }
+}
+
+function handleFileRemove() {
+  selectedFile.value = null
+}
+
 async function handleSubmit() {
   try {
+    const fd = new FormData()
+    fd.append('title', form.title)
+    fd.append('category', form.category)
+    if (form.content_text) fd.append('content_text', form.content_text)
+    if (selectedFile.value) fd.append('file', selectedFile.value)
     if (editId.value) {
-      await updateDocument(editId.value, form)
+      await updateDocument(editId.value, fd)
     } else {
-      const fd = new FormData()
-      fd.append('title', form.title)
-      fd.append('category', form.category)
-      fd.append('content_text', form.content_text)
       await createDocument(fd)
     }
     ElMessage.success('操作成功')
@@ -176,3 +265,16 @@ onMounted(() => {
   if (route.query.id) viewDetail({ id: route.query.id })
 })
 </script>
+
+<style scoped>
+.attachment-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  background: #f9fafb;
+  border: 1px solid #f3f4f6;
+  border-radius: 8px;
+  color: #374151;
+  font-size: 14px;
+}
+</style>

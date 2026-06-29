@@ -16,9 +16,16 @@
           <div class="message-bubble" :class="msg.role">
             <div v-html="formatMessage(msg.content)"></div>
           </div>
+          <div v-if="msg.role === 'assistant' && msg.answer_type" class="answer-type-tag">
+            <el-tag v-if="msg.answer_type === 'faq'" type="success" size="small" effect="plain">FAQ 回答</el-tag>
+            <el-tag v-else-if="msg.answer_type === 'rule'" type="warning" size="small" effect="plain">规则回答</el-tag>
+            <el-tag v-else-if="msg.answer_type === 'rag'" type="primary" size="small" effect="plain">RAG 回答</el-tag>
+            <el-tag v-else-if="msg.answer_type === 'miss'" type="info" size="small" effect="plain">未命中</el-tag>
+            <el-tag v-else size="small" effect="plain">{{ msg.answer_type }}</el-tag>
+          </div>
           <div v-if="msg.role === 'assistant' && msg.source_docs?.length" class="source-docs">
             <el-divider content-position="left"><span style="font-size: 12px; color: #9CA3AF">引用来源</span></el-divider>
-            <el-tag v-for="(doc, i) in msg.source_docs" :key="i" size="small" type="info" style="margin: 2px">{{ doc.title || doc.question || '来源' + (i+1) }}</el-tag>
+            <el-tag v-for="(doc, i) in msg.source_docs" :key="i" size="small" type="info" style="margin: 2px">{{ doc.title || doc.question || doc.name || '来源' + (i+1) }}</el-tag>
           </div>
           <div v-if="msg.role === 'assistant' && msg.record_id" class="message-actions">
             <el-button-group size="small">
@@ -53,6 +60,9 @@
         <el-tooltip content="新建对话" placement="top">
           <el-button :icon="RefreshRight" circle size="small" @click="newConversation" />
         </el-tooltip>
+        <el-tooltip content="查看历史" placement="top">
+          <el-button :icon="Clock" circle size="small" @click="$router.push('/history')" />
+        </el-tooltip>
       </div>
       <el-input v-model="input" placeholder="请输入您的问题... (Shift+Enter换行，Enter发送)" size="large" type="textarea" :autosize="{ minRows: 1, maxRows: 4 }" @keydown="handleKeydown" :disabled="loading" />
       <div style="display: flex; justify-content: flex-end; margin-top: 8px">
@@ -66,7 +76,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Promotion, ChatDotRound, Star, Select, CloseBold, Microphone, Picture, RefreshRight } from '@element-plus/icons-vue'
+import { Promotion, ChatDotRound, Star, Select, CloseBold, Microphone, Picture, RefreshRight, Clock } from '@element-plus/icons-vue'
 import { sendChat, voiceChat, imageChat } from '../api/chat'
 import { getRecommendations } from '../api/recommendations'
 import { createFeedback } from '../api/feedback'
@@ -225,6 +235,7 @@ onMounted(async () => {
 .message-bubble.user { background: #D97706; color: #fff; border-top-right-radius: 4px; }
 .message-bubble.assistant { background: #f9fafb; color: #111827; border-top-left-radius: 4px; border: 1px solid #f3f4f6; }
 .message-actions { margin-top: 8px; display: flex; gap: 8px; }
+.answer-type-tag { margin-top: 6px; }
 .source-docs { margin-top: 8px; }
 .loading-bubble { display: flex; gap: 6px; align-items: center; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #D97706; opacity: 0.4; animation: bounce 1.4s infinite ease-in-out both; }

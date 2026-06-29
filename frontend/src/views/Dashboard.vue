@@ -145,7 +145,11 @@ onMounted(async () => {
   try { const res = await getRecommendations(); recommendations.value = res.data || [] } catch (e) {}
   try { const res = await getNotices({ page_size: 5 }); notices.value = res.data?.items || [] } catch (e) {}
   try { const res = await getTickets({ page_size: 5 }); tickets.value = res.data?.items || [] } catch (e) {}
-  try { const res = await getReminders(); reminders.value = (res.data || []).slice(0, 5) } catch (e) {}
-  try { const res = await getGapStats(); gapStats.value = res.data || {} } catch (e) {}
+  if (userStore.userInfo.role === 'employee') {
+    try { const res = await getReminders(); reminders.value = (res.data || []).slice(0, 5) } catch (e) {}
+  }
+  if (userStore.isHR) {
+    try { const res = await getGapStats(); gapStats.value = res.data || {} } catch (e) {}
+  }
 })
 </script>

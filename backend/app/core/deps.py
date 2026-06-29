@@ -23,7 +23,13 @@ def get_current_user(
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
     if user.status != 1:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="用户已被禁用")
+        if user.status == 0:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号正在等待管理员审核")
+        if user.status == 2:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已被禁用")
+        if user.status == 3:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="注册申请未通过")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号状态异常")
     return user
 
 

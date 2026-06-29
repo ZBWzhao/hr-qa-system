@@ -86,10 +86,8 @@ async function handleRegister() {
   loading.value = true
   try {
     const res = await register(form)
-    userStore.setToken(res.data.access_token)
-    userStore.setUser(res.data.user)
-    ElMessage.success('注册成功')
-    router.push('/dashboard')
+    ElMessage.success(res.message || '注册申请已提交，请等待管理员审核通过后登录')
+    router.push('/login')
   } catch (e) {} finally {
     loading.value = false
   }
