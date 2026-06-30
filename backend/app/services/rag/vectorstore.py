@@ -1,7 +1,7 @@
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 from app.core.config import settings
-from app.services.rag.embedding import encode_texts
+from app.services.rag.embedding import encode_text, encode_texts
 
 _client = None
 _collection = None
