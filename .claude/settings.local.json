@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 *)",
+      "Bash(pip install *)",
+      "Bash(cmd.exe *)",
+      "Bash(python *)",
+      "Bash(PYTHONIOENCODING=utf-8 python *)",
+      "Bash(curl -s http://localhost:8000/)",
+      "Bash(curl -s http://localhost:8080/)",
+      "Bash(mysql *)",
+      "Bash(npm run *)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(pkill -f \"npm run dev\")",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(wmic logicaldisk *)",
+      "Bash(pip config *)",
+      "Bash(pip show *)"
+    ]
+  }
+}
