@@ -1,13 +1,76 @@
 import os
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.api import auth, users, departments, documents, faqs, rules, search, chat, chat_history, feedback, notices, tickets, comments, recommendations, onboarding, reminders, gaps, roi, approvals, bot
 
-Base.metadata.create_all(bind=engine)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_PREFIX}/openapi.json")
+
+def init_rag_system():
+    """初始化RAG系统：索引所有已发布文档到向量数据库"""
+    try:
+        from app.core.database import SessionLocal
+        from app.models.document import Document, DocumentChunk
+        from app.services.text_splitter import chunk_document
+        from app.services.rag.vectorstore import add_documents, delete_document, get_collection_stats
+
+        logger.info("正在初始化RAG系统...")
+        db = SessionLocal()
+        try:
+            documents = db.query(Document).filter(Document.status == "published").all()
+            logger.info(f"找到 {len(documents)} 个已发布文档")
+
+            for doc in documents:
+                delete_document(doc.id)
+                chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc.id).all()
+
+                if not chunks and doc.content_text:
+                    logger.info(f"  文档 [{doc.title}] 无切片，自动切分...")
+                    chunk_data = chunk_document(doc.content_text)
+                    for i, cd in enumerate(chunk_data):
+                        chunk = DocumentChunk(
+                            document_id=doc.id,
+                            content=cd["content"],
+                            keywords=cd["keywords"],
+                            chunk_index=i
+                        )
+                        db.add(chunk)
+                    db.commit()
+                    chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc.id).all()
+
+                if chunks:
+                    chunk_dicts = [{"content": c.content, "keywords": c.keywords or ""} for c in chunks]
+                    add_documents(doc.id, chunk_dicts)
+                    logger.info(f"  文档 [{doc.title}] 已索引 {len(chunks)} 个切片")
+
+            stats = get_collection_stats()
+            logger.info(f"RAG系统初始化完成! 向量数据库中共有 {stats['total_chunks']} 个向量")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"RAG系统初始化失败: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时执行
+    logger.info("HR Copilot 启动中...")
+    Base.metadata.create_all(bind=engine)
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)
+    init_rag_system()
+    logger.info("HR Copilot 启动完成!")
+    yield
+    # 关闭时执行（可选）
+    logger.info("HR Copilot 关闭中...")
+
+
+app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_PREFIX}/openapi.json", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,8 +79,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 app.include_router(auth.router, prefix=f"{settings.API_V1_PREFIX}/auth", tags=["认证"])
 app.include_router(users.router, prefix=f"{settings.API_V1_PREFIX}/users", tags=["用户管理"])

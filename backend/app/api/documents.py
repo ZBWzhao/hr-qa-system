@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.schemas.document import DocumentOut, ChunkOut
 from app.models.document import Document, DocumentChunk, DocumentVersion
 from app.models.user import User
+from app.services.rag.vectorstore import add_documents, delete_document
 
 router = APIRouter()
 
@@ -208,10 +209,14 @@ def update_document(doc_id: int, title: Optional[str] = Form(None), category: Op
 
 
 @router.delete("/{doc_id}")
-def delete_document(doc_id: int, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def delete_document_endpoint(doc_id: int, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         return error("文档不存在")
+
+    # 删除Chroma中的向量
+    delete_document(doc_id)
+
     db.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).delete()
     db.query(DocumentVersion).filter(DocumentVersion.document_id == doc_id).delete()
     db.delete(doc)
@@ -226,6 +231,13 @@ def publish_document(doc_id: int, current_user: User = Depends(require_roles("hr
         return error("文档不存在")
     doc.status = "published"
     db.commit()
+
+    # 发布时自动向量化到Chroma
+    chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).all()
+    if chunks:
+        chunk_dicts = [{"content": c.content, "keywords": c.keywords or ""} for c in chunks]
+        add_documents(doc_id, chunk_dicts)
+
     return success(None, "发布成功")
 
 
@@ -249,3 +261,25 @@ def get_document_chunks(doc_id: int, db: Session = Depends(get_db)):
 def get_document_versions(doc_id: int, db: Session = Depends(get_db)):
     versions = db.query(DocumentVersion).filter(DocumentVersion.document_id == doc_id).order_by(DocumentVersion.created_at.desc()).all()
     return success([{"id": v.id, "version": v.version, "created_by": v.created_by, "created_at": v.created_at.isoformat()} for v in versions])
+
+
+@router.post("/reindex")
+def reindex_all_documents(current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+    """重新索引所有已发布文档到向量数据库"""
+    from app.services.rag.vectorstore import get_collection_stats
+
+    documents = db.query(Document).filter(Document.status == "published").all()
+    indexed_count = 0
+
+    for doc in documents:
+        chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc.id).all()
+        if chunks:
+            chunk_dicts = [{"content": c.content, "keywords": c.keywords or ""} for c in chunks]
+            add_documents(doc.id, chunk_dicts)
+            indexed_count += 1
+
+    stats = get_collection_stats()
+    return success({
+        "indexed_documents": indexed_count,
+        "total_chunks": stats["total_chunks"]
+    }, f"已重新索引 {indexed_count} 个文档")

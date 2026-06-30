@@ -11,6 +11,9 @@ from app.schemas.qa import ChatRequest, ChatResponse
 from app.models.qa import QARecord, FAQ, Rule, QAMiss
 from app.models.document import Document, DocumentChunk
 from app.models.user import User
+from app.services.rag.vectorstore import search_similar
+from app.services.llm import generate_answer, analyze_intent, generate_clarification
+from app.services.text_splitter import extract_keywords
 
 router = APIRouter()
 
@@ -34,11 +37,6 @@ def get_conversation_context(db: Session, user_id: int, conversation_id: str, li
     for r in reversed(records):
         context += f"问：{r.question}\n答：{r.answer[:200]}\n\n"
     return context
-
-
-def extract_keywords(text: str) -> list:
-    words = re.findall(r'[\u4e00-\u9fff]{2,8}', text)
-    return list(set(words))
 
 
 def match_faq(db: Session, question: str):
@@ -80,44 +78,38 @@ def match_rule(db: Session, question: str):
     return None
 
 
-def rag_search(db: Session, question: str):
-    keywords = extract_keywords(question)
-    chunks = db.query(DocumentChunk, Document).join(Document, DocumentChunk.document_id == Document.id).filter(Document.status == "published").all()
-    scored = []
-    for chunk, doc in chunks:
-        score = 0
-        for kw in keywords:
-            if kw in chunk.content:
-                score += 2
-            if chunk.keywords and kw in chunk.keywords:
-                score += 3
-            if kw in doc.title:
-                score += 5
-            if kw in doc.category:
-                score += 2
-        if score > 0:
-            scored.append({"chunk": chunk, "doc": doc, "score": score})
-    scored.sort(key=lambda x: x["score"], reverse=True)
-    return scored[:5]
+def rag_search_and_generate(question: str, history: str = "") -> tuple:
+    # 先进行意图分析
+    intent_result = analyze_intent(question)
 
+    # 如果需要澄清，返回澄清请求
+    if intent_result.get("need_clarification", False):
+        clarification_reason = intent_result.get("clarification_reason", "")
+        possible_intents = [
+            f"{intent_result.get('intent', '其他')}相关问题",
+            "其他HR制度问题"
+        ]
+        clarification = generate_clarification(question, possible_intents)
+        return clarification, [], "need_clarification"
 
-def mock_llm_answer(question: str, context_chunks: list):
-    if not context_chunks:
-        return None, []
+    search_results = search_similar(question, top_k=5)
+
+    if not search_results or search_results[0]["score"] < 0.3:
+        return None, [], "low_confidence"
+
+    context = "\n\n".join([r["content"] for r in search_results])
     sources = []
-    context_text = ""
-    for item in context_chunks:
-        chunk = item["chunk"]
-        doc = item["doc"]
-        context_text += chunk.content + "\n\n"
-        sources.append({"document_id": doc.id, "title": doc.title, "category": doc.category, "chunk": chunk.content[:200]})
+    for r in search_results:
+        meta = r.get("metadata", {})
+        sources.append({
+            "doc_id": meta.get("doc_id"),
+            "chunk": r["content"][:200],
+            "score": round(r["score"], 3)
+        })
 
-    answer = f"根据公司制度，关于「{question}」的回答如下：\n\n"
-    answer += f"【结论】{context_chunks[0]['chunk'].content[:150]}\n\n"
-    answer += f"【制度依据】{context_text[:300]}\n\n"
-    answer += f"【来源文档】{', '.join(list(set(s['title'] for s in sources)))}\n\n"
-    answer += "【温馨提示】如有疑问请联系HR部门或提交工单咨询。"
-    return answer, sources
+    answer = generate_answer(question, context, history)
+
+    return answer, sources, "high_confidence"
 
 
 @router.post("")
@@ -170,17 +162,16 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "conversation_id": conv_id
         })
 
-    rag_results = rag_search(db, question)
-    if rag_results and rag_results[0]["score"] >= 5:
-        answer, sources = mock_llm_answer(question, rag_results)
-        if context:
-            answer = answer + "\n\n【对话上下文】\n" + context
+    answer, sources, confidence = rag_search_and_generate(question, context)
+
+    if confidence == "need_clarification":
+        # 意图不清晰，需要用户澄清
         record = QARecord(
             user_id=current_user.id,
             question=question,
             answer=answer,
-            answer_type="rag",
-            source_docs=json.dumps(sources),
+            answer_type="clarification",
+            source_docs=json.dumps([]),
             conversation_id=conv_id
         )
         db.add(record)
@@ -188,21 +179,45 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
         db.refresh(record)
         return success({
             "answer": answer,
-            "answer_type": "rag",
-            "source_docs": sources,
+            "answer_type": "clarification",
+            "source_docs": [],
             "record_id": record.id,
-            "conversation_id": conv_id
+            "conversation_id": conv_id,
+            "need_clarification": True
         })
 
-    miss = QAMiss(user_id=current_user.id, question=question)
-    db.add(miss)
-    answer = f"抱歉，关于「{question}」，当前知识库暂未找到明确依据。\n\n建议您：\n1. 联系HR部门获取帮助\n2. 提交工单进行详细咨询\n3. 尝试换个关键词重新提问"
+    if confidence == "low_confidence":
+        miss = QAMiss(user_id=current_user.id, question=question)
+        db.add(miss)
+
+        clarification = f"抱歉，关于「{question}」，当前知识库暂未找到明确依据。\n\n建议您：\n1. 换个关键词重新提问\n2. 联系HR部门获取帮助\n3. 提交工单进行详细咨询"
+
+        record = QARecord(
+            user_id=current_user.id,
+            question=question,
+            answer=clarification,
+            answer_type="miss",
+            source_docs=json.dumps([]),
+            conversation_id=conv_id
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        return success({
+            "answer": clarification,
+            "answer_type": "miss",
+            "source_docs": [],
+            "record_id": record.id,
+            "conversation_id": conv_id,
+            "need_clarification": True
+        })
+
     record = QARecord(
         user_id=current_user.id,
         question=question,
         answer=answer,
-        answer_type="miss",
-        source_docs=json.dumps([]),
+        answer_type="rag",
+        source_docs=json.dumps(sources),
         conversation_id=conv_id
     )
     db.add(record)
@@ -210,8 +225,8 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     db.refresh(record)
     return success({
         "answer": answer,
-        "answer_type": "miss",
-        "source_docs": [],
+        "answer_type": "rag",
+        "source_docs": sources,
         "record_id": record.id,
         "conversation_id": conv_id
     })
@@ -235,3 +250,10 @@ def image_chat(current_user: User = Depends(get_current_user)):
         "answer": "【图片问答Mock】\n\n已识别图片内容为报销单据。报销流程如下：\n1. 填写报销申请表\n2. 附上发票原件\n3. 部门主管审批\n4. 财务审核\n5. 打款\n\n温馨提示：报销需在消费后30天内提交。",
         "answer_type": "mock"
     })
+
+
+@router.get("/stats")
+def get_chat_stats(current_user: User = Depends(get_current_user)):
+    from app.services.rag.vectorstore import get_collection_stats
+    stats = get_collection_stats()
+    return success(stats)

@@ -11,3 +11,11 @@ export function voiceChat() {
 export function imageChat() {
   return request.post('/chat/image')
 }
+
+export function getChatStats() {
+  return request.get('/chat/stats')
+}
+
+export function reindexDocuments() {
+  return request.post('/documents/reindex')
+}
