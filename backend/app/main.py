@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api import auth, users, departments, documents, faqs, rules, search, chat, chat_history, feedback, notices, tickets, comments, recommendations, onboarding, reminders, gaps, roi, approvals, bot
+from app.api import auth, users, departments, documents, faqs, rules, search, chat, chat_history, conversations, feedback, notices, tickets, comments, recommendations, onboarding, reminders, gaps, roi, approvals, bot
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -89,6 +89,7 @@ app.include_router(rules.router, prefix=f"{settings.API_V1_PREFIX}/rules", tags=
 app.include_router(search.router, prefix=f"{settings.API_V1_PREFIX}/search", tags=["搜索"])
 app.include_router(chat.router, prefix=f"{settings.API_V1_PREFIX}/chat", tags=["智能问答"])
 app.include_router(chat_history.router, prefix=f"{settings.API_V1_PREFIX}/chat/history", tags=["问答历史"])
+app.include_router(conversations.router, prefix=f"{settings.API_V1_PREFIX}/chat/conversations", tags=["对话管理"])
 app.include_router(feedback.router, prefix=f"{settings.API_V1_PREFIX}/feedback", tags=["反馈"])
 app.include_router(notices.router, prefix=f"{settings.API_V1_PREFIX}/notices", tags=["通知公告"])
 app.include_router(tickets.router, prefix=f"{settings.API_V1_PREFIX}/tickets", tags=["工单系统"])

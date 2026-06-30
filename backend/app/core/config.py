@@ -1,7 +1,15 @@
-from pydantic_settings import BaseSettings
+from pathlib import Path
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=str(BASE_DIR / ".env"),
+        case_sensitive=True,
+    )
+
     PROJECT_NAME: str = "HR Copilot"
     API_V1_PREFIX: str = "/api/v1"
     DATABASE_URL: str = "mysql+pymysql://root:123456@localhost:3306/hr_copilot"
@@ -20,10 +28,6 @@ class Settings(BaseSettings):
 
     # Embedding模型配置
     EMBEDDING_MODEL: str = "shibing624/text2vec-base-chinese"
-
-    class Config:
-        case_sensitive = True
-        env_file = ".env"
 
 
 settings = Settings()

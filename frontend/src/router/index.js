@@ -21,6 +21,7 @@ const routes = [
     children: [
       { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '首页' } },
       { path: 'chat', name: 'Chat', component: () => import('../views/Chat.vue'), meta: { title: '智能问答' } },
+      { path: 'chat/:conversationId', name: 'ChatConversation', component: () => import('../views/Chat.vue'), meta: { title: '智能问答' } },
       { path: 'search', name: 'Search', component: () => import('../views/Search.vue'), meta: { title: '关键词搜索' } },
       { path: 'documents', name: 'Documents', component: () => import('../views/Documents.vue'), meta: { title: '制度文档', roles: ['hr', 'admin'] } },
       { path: 'faqs', name: 'FAQs', component: () => import('../views/FAQs.vue'), meta: { title: 'FAQ管理' } },

@@ -10,7 +10,7 @@ build/
 
 # Node
 node_modules/
-frontend/node_modules/
+frontend/dist/
 
 # IDE
 .idea/
@@ -25,3 +25,21 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Logs
+*.log
+
+# Data & uploads
+backend/data/
+backend/app/data/
+backend/app/uploads/
+
+# Claude Code
+.claude/
+
+# Office docs (需求文档等)
+*.docx
+*.doc
+
+# Misc
+修改提示词part1.md

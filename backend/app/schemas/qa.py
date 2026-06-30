@@ -131,3 +131,17 @@ class SearchRequest(BaseModel):
     category: Optional[str] = None
     page: int = 1
     page_size: int = 20
+
+
+class ConversationItem(BaseModel):
+    conversation_id: str
+    title: str
+    last_message: str
+    message_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationGroup(BaseModel):
+    label: str
+    conversations: List[ConversationItem]
