@@ -90,21 +90,31 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
                 content = message.get("content", "")
                 reasoning = message.get("reasoning_content", "")
 
-            # MiMo 模型可能将内容放在 reasoning_content 中
-            # 从 reasoning 中提取关键词
+            # 如果 content 为空，从 reasoning 中提取关键词
             if reasoning and not content:
-                # 尝试从 reasoning 中找到关键词部分
-                # 通常在最后几行，格式为 "关键词：xxx,xxx,xxx" 或直接 "xxx,xxx,xxx"
+                # 使用正则表达式提取最后一个逗号分隔的词组
+                # 匹配模式：中文词,中文词,中文词 或 英文词,英文词
+                pattern = r'[一-龥a-zA-Z]{2,}(?:[,，][一-龥a-zA-Z]{2,})+'
+                matches = re.findall(pattern, reasoning)
+
+                if matches:
+                    # 取最后一个匹配（通常是最终的关键词列表）
+                    content = matches[-1]
+
+            # 如果还是没有，尝试更宽松的匹配
+            if not content and reasoning:
+                # 查找所有包含逗号的行
                 lines = reasoning.strip().split('\n')
                 for line in reversed(lines):
                     line = line.strip()
-                    # 检查是否包含逗号分隔的关键词
+                    # 检查是否包含逗号
                     if ',' in line or '，' in line:
-                        # 移除可能的前缀
-                        line = re.sub(r'^(关键词[：:]?\s*)', '', line)
-                        # 检查是否像关键词（包含逗号，长度适中）
-                        if 5 < len(line) < 100:
-                            content = line
+                        # 提取逗号分隔的部分
+                        parts = re.split(r'[,，]', line)
+                        # 过滤掉太长的部分（可能是句子）
+                        valid_parts = [p.strip() for p in parts if 1 < len(p.strip()) < 10]
+                        if len(valid_parts) >= 3:
+                            content = ','.join(valid_parts)
                             break
 
             if not content:
