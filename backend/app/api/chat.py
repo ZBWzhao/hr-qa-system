@@ -190,7 +190,11 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     # 第一步：关键词匹配FAQ（不调用API，快速响应）
     faq = match_faq(db, question)
     if faq:
-        answer = f"【标准答案】\n\n{faq.answer}"
+        # 构建更有逻辑性的回答
+        answer = f"我理解您的问题是关于「{faq.question}」。\n\n"
+        answer += f"根据标准答案库查询，找到以下相关信息：\n\n"
+        answer += f"**问题：** {faq.question}\n\n"
+        answer += f"**答案：** {faq.answer}"
         record = QARecord(
             user_id=current_user.id,
             question=question,
@@ -213,7 +217,10 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     # 第二步：关键词匹配规则（不调用API，快速响应）
     rule = match_rule(db, question)
     if rule:
-        answer = f"【规则回答】\n\n{rule.answer_template}"
+        # 构建更有逻辑性的回答
+        answer = f"我理解您的问题，根据公司相关规则查询：\n\n"
+        answer += f"**规则名称：** {rule.name}\n\n"
+        answer += f"**规定内容：**\n{rule.answer_template}"
         record = QARecord(
             user_id=current_user.id,
             question=question,
