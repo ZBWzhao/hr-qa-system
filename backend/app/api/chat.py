@@ -144,6 +144,13 @@ def rag_search_and_generate(question: str, history: str = "") -> tuple:
     # 调用AI生成回答
     answer = generate_answer(question, context, history)
 
+    # 检查AI回答是否表示未找到信息
+    miss_keywords = ["未找到", "无法回答", "没有找到", "未查询到", "没有相关信息", "暂未找到"]
+    is_miss = any(kw in answer for kw in miss_keywords)
+
+    if is_miss:
+        return answer, sources, "low_confidence"
+
     return answer, sources, "high_confidence"
 
 
