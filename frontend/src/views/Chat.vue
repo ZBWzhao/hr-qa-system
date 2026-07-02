@@ -255,9 +255,13 @@ function saveNotes() { localStorage.setItem(notesKey(chatStore.currentConversati
 watch(notes, saveNotes)
 
 // ===== 工单引导 =====
-const ticketKeywords = ['申请', '办理', '开具', '证明', '信息变更', '转人工', '联系HR', '提交工单', '人工处理', '考勤异常']
+const ticketKeywords = [
+  '申请', '办理', '开具', '证明', '信息变更', '转人工', '联系HR',
+  '提交工单', '人工处理', '考勤异常', '工单', '提单', '求助HR',
+  '需要HR', '找HR', 'HR处理', '想开证明', '想办', '想申请'
+]
 const ticketTypeMap = {
-  '证明': 'certify', '在职': 'certify', '开具': 'certify',
+  '证明': 'certify', '在职': 'certify', '开具': 'certify', '收入': 'certify',
   '变更': 'info_change', '修改': 'info_change', '联系方式': 'info_change',
   '考勤': 'other', '异常': 'other',
 }
