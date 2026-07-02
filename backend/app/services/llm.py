@@ -141,24 +141,56 @@ def analyze_intent(question: str) -> dict:
         if confidence > 0.5:
             break
 
-    # 检查是否需要澄清（问题太短或太模糊）
+    # 智能澄清判断
     need_clarification = False
     clarification_reason = ""
+    clarification_hint = ""
 
+    # 1. 问题太短（少于4个字）
     if len(question) < 4:
         need_clarification = True
-        clarification_reason = "问题太短，请描述更详细"
-    elif not any(kw in question_lower for kw_list in intent_keywords.values() for kw in kw_list):
-        # 没有匹配到任何关键词，可能是模糊问题
-        vague_patterns = ["怎么办", "怎么弄", "如何", "是什么", "多少", "几天"]
-        if any(p in question_lower for p in vague_patterns):
-            if len(question) < 10:
-                need_clarification = True
-                clarification_reason = "问题表述不够具体，请补充更多细节"
+        clarification_reason = "问题太简短"
+        clarification_hint = "请详细描述您想了解的内容"
+
+    # 2. 指代不明（使用了"这个"、"那个"、"它"等代词）
+    vague_references = ["这个", "那个", "它", "这个东西", "那个东西", "这个事情", "那个事情"]
+    if any(ref in question for ref in vague_references):
+        need_clarification = True
+        clarification_reason = "存在指代不明"
+        clarification_hint = "请具体说明您指的是什么"
+
+    # 3. 模糊请求（只有动词没有对象）
+    vague_requests = ["怎么办", "怎么弄", "怎么做", "帮我", "告诉我", "解释一下", "说一下"]
+    if any(req in question for req in vague_requests):
+        # 检查是否有具体对象
+        has_object = len(question) > 8 and any(kw in question for kw_list in intent_keywords.values() for kw in kw_list)
+        if not has_object:
+            need_clarification = True
+            clarification_reason = "请求不够具体"
+            clarification_hint = "请说明您想了解哪方面的内容"
+
+    # 4. 疑问词开头但没有具体内容
+    question_starters = ["怎么", "如何", "什么", "为什么", "多少", "几天", "能不能", "可不可以"]
+    if any(question.startswith(starter) for starter in question_starters):
+        if len(question) < 8:
+            need_clarification = True
+            clarification_reason = "问题不够完整"
+            clarification_hint = "请补充更多细节，例如具体场景或对象"
+
+    # 5. 检测到多个可能的意图
+    matched_intents = []
+    for intent, keywords in intent_keywords.items():
+        if any(kw in question_lower for kw in keywords):
+            matched_intents.append(intent)
+    if len(matched_intents) > 2:
+        need_clarification = True
+        clarification_reason = "涉及多个主题"
+        clarification_hint = f"您的问题可能涉及{'、'.join(matched_intents[:3])}等多个方面，请说明您最想了解的是哪个"
 
     return {
         "intent": detected_intent,
         "confidence": confidence,
         "need_clarification": need_clarification,
-        "clarification_reason": clarification_reason
+        "clarification_reason": clarification_reason,
+        "clarification_hint": clarification_hint
     }

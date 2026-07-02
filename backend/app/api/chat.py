@@ -136,11 +136,26 @@ def rag_search_and_generate(question: str, history: str = "") -> tuple:
     # 如果需要澄清，返回澄清请求
     if intent_result.get("need_clarification", False):
         clarification_reason = intent_result.get("clarification_reason", "")
-        possible_intents = [
-            f"{intent_result.get('intent', '其他')}相关问题",
-            "其他HR制度问题"
-        ]
-        clarification = generate_clarification(question, possible_intents)
+        clarification_hint = intent_result.get("clarification_hint", "请补充更多细节")
+        intent = intent_result.get("intent", "其他")
+
+        # 生成友好的澄清提示
+        clarification = f"🤔 我注意到您的问题可能需要补充一些信息。\n\n"
+        clarification += f"**问题分析：** {clarification_reason}\n\n"
+        clarification += f"**建议：** {clarification_hint}\n\n"
+
+        # 根据意图给出具体的提示
+        if intent == "考勤":
+            clarification += "例如：您可以问「请假需要提前多久申请？」或「加班可以调休吗？」"
+        elif intent == "休假":
+            clarification += "例如：您可以问「年假有几天？」或「病假需要什么证明？」"
+        elif intent == "薪酬":
+            clarification += "例如：您可以问「工资是怎么构成的？」或「社保缴纳比例是多少？」"
+        elif intent == "绩效":
+            clarification += "例如：您可以问「绩效考核标准是什么？」或「绩效申诉怎么提交？」"
+        else:
+            clarification += "例如：您可以问「试用期多久？」或「报销流程是什么？」"
+
         return clarification, [], "need_clarification"
 
     # 进行向量搜索

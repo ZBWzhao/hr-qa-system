@@ -414,10 +414,29 @@ async function submitTicketForm() {
 
 // ===== 澄清追问 =====
 function needsClarification(text) {
-  const hasYearLeave = text.includes('年假')
-  const hasHowMany = ['几天', '多少天', '今年有几天'].some(kw => text.includes(kw))
-  const hasContext = ['入职', '工龄', '工作满', '几年', '年限'].some(kw => text.includes(kw))
-  return hasYearLeave && hasHowMany && !hasContext
+  // 1. 问题太短（少于4个字）
+  if (text.length < 4) return true
+
+  // 2. 指代不明
+  const vagueReferences = ["这个", "那个", "它", "这个东西", "那个东西"]
+  if (vagueReferences.some(ref => text.includes(ref))) return true
+
+  // 3. 模糊请求（只有动词没有对象）
+  const vagueRequests = ["怎么办", "怎么弄", "怎么做", "帮我", "告诉我"]
+  if (vagueRequests.some(req => text.includes(req)) && text.length < 10) return true
+
+  // 4. 疑问词开头但没有具体内容
+  const questionStarters = ["怎么", "如何", "什么", "为什么", "多少", "几天", "能不能", "可不可以"]
+  if (questionStarters.some(starter => text.startsWith(starter)) && text.length < 8) return true
+
+  // 5. 年假查询但没有提供工龄信息
+  if (text.includes('年假') && ['几天', '多少天'].some(kw => text.includes(kw))) {
+    if (!['入职', '工龄', '工作满', '几年', '年限'].some(kw => text.includes(kw))) {
+      return true
+    }
+  }
+
+  return false
 }
 
 // ===== 消息渲染 =====
@@ -509,7 +528,21 @@ async function sendMessage() {
 
   // 前端拦截：澄清追问
   if (needsClarification(q)) {
-    const answer = '我需要先确认你的工龄或入职日期，才能准确计算年假天数。\n请补充以下任意一项：\n1. 入职日期\n2. 累计工作年限'
+    let answer = ''
+
+    // 根据不同类型生成不同的澄清提示
+    if (q.length < 4) {
+      answer = '🤔 您的问题太简短了，我不太确定您想了解什么。\n\n请详细描述您想了解的内容，例如：\n- 请假需要提前多久申请？\n- 年假有几天？\n- 报销流程是什么？'
+    } else if (['这个', '那个', '它'].some(ref => q.includes(ref))) {
+      answer = '🤔 您的问题中有一些指代不明确的地方。\n\n请具体说明您指的是什么，例如：\n- 这个规定 → 具体是哪个规定？\n- 那个流程 → 具体是哪个流程？'
+    } else if (['怎么办', '怎么弄'].some(req => q.includes(req)) && q.length < 10) {
+      answer = '🤔 您想了解怎么办理什么事情呢？\n\n请补充具体事项，例如：\n- 怎么申请年假？\n- 怎么报销差旅费？\n- 怎么提交绩效申诉？'
+    } else if (q.includes('年假') && ['几天', '多少天'].some(kw => q.includes(kw))) {
+      answer = '🤔 年假天数根据工龄不同而不同，我需要确认您的情况。\n\n请补充以下任意一项：\n1. 您的入职日期\n2. 您的累计工作年限\n\n这样我就能准确告诉您有多少天年假了。'
+    } else {
+      answer = '🤔 您的问题可能需要补充一些信息。\n\n请详细描述您想了解的内容，或者您可以尝试这样问：\n- 请假需要提前多久申请？\n- 绩效考核标准是什么？\n- 报销流程是怎样的？'
+    }
+
     chatStore.messages.push({
       role: 'assistant',
       content: answer,
