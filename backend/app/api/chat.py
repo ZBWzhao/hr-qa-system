@@ -25,6 +25,7 @@ def get_or_create_conversation_id(db: Session, user_id: int, conversation_id: st
 
 
 def get_conversation_context(db: Session, user_id: int, conversation_id: str, limit: int = 3) -> str:
+    """获取对话历史上下文"""
     if not conversation_id:
         return ""
     records = db.query(QARecord).filter(
@@ -35,28 +36,42 @@ def get_conversation_context(db: Session, user_id: int, conversation_id: str, li
         return ""
     context = "以下是之前的对话记录：\n"
     for r in reversed(records):
-        context += f"问：{r.question}\n答：{r.answer[:200]}\n\n"
+        # 限制历史记录长度
+        q = r.question[:50] if r.question else ""
+        a = r.answer[:100] if r.answer else ""
+        context += f"问：{q}\n答：{a}\n\n"
     return context
 
 
 def match_faq(db: Session, question: str):
+    """关键词匹配FAQ，不调用API"""
     keywords = extract_keywords(question)
     faqs = db.query(FAQ).filter(FAQ.status == 1).all()
+
     best_match = None
     best_score = 0
+
+    q_lower = question.lower()
+
     for faq in faqs:
         score = 0
-        q_lower = question.lower()
-        if faq.question.lower() in q_lower or q_lower in faq.question.lower():
+
+        # 完全匹配问题
+        if faq.question and (faq.question.lower() in q_lower or q_lower in faq.question.lower()):
             score += 10
+
+        # 关键词匹配
         for kw in keywords:
-            if kw in faq.question:
+            if kw and faq.question and kw in faq.question:
                 score += 3
-            if faq.keywords and kw in faq.keywords:
+            if kw and faq.keywords and kw in faq.keywords:
                 score += 2
+
         if score > best_score:
             best_score = score
             best_match = faq
+
+    # 阈值设为3，避免误匹配
     if best_match and best_score >= 3:
         best_match.view_count += 1
         return best_match
@@ -64,22 +79,34 @@ def match_faq(db: Session, question: str):
 
 
 def match_rule(db: Session, question: str):
+    """关键词匹配规则，不调用API"""
     keywords = extract_keywords(question)
     rules = db.query(Rule).filter(Rule.status == 1).order_by(Rule.priority.desc()).all()
+
     for rule in rules:
-        triggers = [t.strip() for t in rule.trigger_keywords.split(",")]
+        if not rule.trigger_keywords:
+            continue
+        triggers = [t.strip() for t in rule.trigger_keywords.split(",") if t.strip()]
+
+        # 直接匹配触发词
         for trigger in triggers:
-            if trigger in question:
+            if trigger and trigger in question:
                 return rule
+
+        # 关键词匹配
         for kw in keywords:
+            if not kw:
+                continue
             for trigger in triggers:
-                if kw in trigger or trigger in kw:
+                if trigger and (kw in trigger or trigger in kw):
                     return rule
     return None
 
 
 def rag_search_and_generate(question: str, history: str = "") -> tuple:
-    # 先进行意图分析
+    """RAG搜索 + AI生成回答"""
+
+    # 先进行意图分析（使用关键词，不调用API）
     intent_result = analyze_intent(question)
 
     # 如果需要澄清，返回澄清请求
@@ -92,21 +119,29 @@ def rag_search_and_generate(question: str, history: str = "") -> tuple:
         clarification = generate_clarification(question, possible_intents)
         return clarification, [], "need_clarification"
 
+    # 进行向量搜索
     search_results = search_similar(question, top_k=5)
 
+    # 如果没有搜索结果或置信度太低
     if not search_results or search_results[0]["score"] < 0.3:
         return None, [], "low_confidence"
 
-    context = "\n\n".join([r["content"] for r in search_results])
+    # 构建上下文，限制长度
+    context_parts = []
     sources = []
-    for r in search_results:
+    for r in search_results[:3]:  # 只取前3个结果
+        content = r["content"][:300]  # 限制每个chunk长度
+        context_parts.append(content)
         meta = r.get("metadata", {})
         sources.append({
             "doc_id": meta.get("doc_id"),
-            "chunk": r["content"][:200],
+            "chunk": content[:100],
             "score": round(r["score"], 3)
         })
 
+    context = "\n\n".join(context_parts)
+
+    # 调用AI生成回答
     answer = generate_answer(question, context, history)
 
     return answer, sources, "high_confidence"
@@ -116,11 +151,15 @@ def rag_search_and_generate(question: str, history: str = "") -> tuple:
 def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     conv_id = get_or_create_conversation_id(db, current_user.id, data.conversation_id)
     context = get_conversation_context(db, current_user.id, conv_id)
-    question = data.question
+    question = data.question.strip()
 
+    if not question:
+        return error("请输入问题")
+
+    # 第一步：关键词匹配FAQ（不调用API，快速响应）
     faq = match_faq(db, question)
     if faq:
-        answer = f"【FAQ回答】\n\n{faq.answer}"
+        answer = f"【标准答案】\n\n{faq.answer}"
         record = QARecord(
             user_id=current_user.id,
             question=question,
@@ -140,9 +179,10 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "conversation_id": conv_id
         })
 
+    # 第二步：关键词匹配规则（不调用API，快速响应）
     rule = match_rule(db, question)
     if rule:
-        answer = rule.answer_template
+        answer = f"【规则回答】\n\n{rule.answer_template}"
         record = QARecord(
             user_id=current_user.id,
             question=question,
@@ -162,10 +202,11 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "conversation_id": conv_id
         })
 
+    # 第三步：RAG搜索 + AI生成（调用API）
     answer, sources, confidence = rag_search_and_generate(question, context)
 
+    # 意图不清晰，需要用户澄清
     if confidence == "need_clarification":
-        # 意图不清晰，需要用户澄清
         record = QARecord(
             user_id=current_user.id,
             question=question,
@@ -186,6 +227,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "need_clarification": True
         })
 
+    # 置信度低，未找到相关信息
     if confidence == "low_confidence":
         miss = QAMiss(user_id=current_user.id, question=question)
         db.add(miss)
@@ -212,6 +254,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "need_clarification": True
         })
 
+    # 高置信度，AI生成了回答
     record = QARecord(
         user_id=current_user.id,
         question=question,
