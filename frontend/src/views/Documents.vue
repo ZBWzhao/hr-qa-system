@@ -27,7 +27,11 @@
       </el-select>
     </div>
     <el-table :data="documents" v-loading="loading" stripe>
-      <el-table-column prop="title" label="文档标题" min-width="200" />
+      <el-table-column prop="title" label="文档标题" min-width="200">
+        <template #default="{ row }">
+          <span v-html="highlightTitle(row.title)"></span>
+        </template>
+      </el-table-column>
       <el-table-column prop="category" label="分类" width="100">
         <template #default="{ row }">
           <el-tag size="small">{{ categoryLabel(row.category) }}</el-tag>
@@ -127,6 +131,10 @@
           <el-icon style="margin-right: 8px; color: #D97706"><Document /></el-icon>
           <span>{{ detail.file_path?.split('/').pop()?.split('\\').pop() || '附件' }}</span>
           <el-tag size="small" style="margin-left: 8px" type="info">{{ detail.file_type || '未知' }}</el-tag>
+          <el-button size="small" type="primary" style="margin-left: auto" @click="downloadFile(detail)">
+            <el-icon style="margin-right: 4px"><Download /></el-icon>
+            下载
+          </el-button>
         </div>
       </div>
 
@@ -147,7 +155,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Search, Loading } from '@element-plus/icons-vue'
+import { Document, Search, Loading, Download } from '@element-plus/icons-vue'
 import { getDocuments, createDocument, updateDocument, deleteDocument, publishDocument, archiveDocument, getDocument, classifyDocument } from '../api/documents'
 import { useUserStore } from '../stores/user'
 
@@ -166,6 +174,33 @@ const detailVisible = ref(false)
 const detail = ref({})
 const classifying = ref(false)
 const categoryConfidence = ref(null)
+
+// 搜索高亮
+function highlightTitle(title) {
+  const kw = filters.keyword?.trim()
+  if (!kw || !title) return title
+  const regex = new RegExp(`(${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+  return title.replace(regex, '<em style="color: #f5222d; font-style: normal; font-weight: 600">$1</em>')
+}
+
+// 下载附件
+function downloadFile(doc) {
+  if (!doc.file_path) {
+    ElMessage.warning('该文档没有附件')
+    return
+  }
+  // 构建下载链接
+  const fileName = doc.file_path.split('/').pop()?.split('\\').pop() || '附件'
+  const downloadUrl = `/api/v1/documents/${doc.id}/download`
+
+  // 创建临时链接触发下载
+  const link = document.createElement('a')
+  link.href = downloadUrl
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
 
 function categoryLabel(c) {
   return { attendance: '考勤', salary: '薪酬', benefit: '福利', leave: '休假', performance: '绩效', other: '其他' }[c] || c

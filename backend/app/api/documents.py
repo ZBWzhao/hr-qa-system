@@ -335,6 +335,31 @@ def unarchive_document(doc_id: int, current_user: User = Depends(require_roles("
     return success(None, "下架成功")
 
 
+@router.get("/{doc_id}/download")
+def download_document(doc_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """下载文档附件"""
+    from fastapi.responses import FileResponse
+
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        return error("文档不存在")
+    if not doc.file_path:
+        return error("该文档没有附件")
+
+    import os
+    if not os.path.exists(doc.file_path):
+        return error("附件文件不存在，可能已被删除")
+
+    # 获取文件名
+    file_name = os.path.basename(doc.file_path)
+
+    return FileResponse(
+        path=doc.file_path,
+        filename=file_name,
+        media_type='application/octet-stream'
+    )
+
+
 @router.get("/{doc_id}/chunks")
 def get_document_chunks(doc_id: int, db: Session = Depends(get_db)):
     chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).order_by(DocumentChunk.chunk_index).all()
