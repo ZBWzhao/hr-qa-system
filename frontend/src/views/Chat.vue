@@ -532,6 +532,74 @@ async function sendMessage() {
   chatStore.messages.push({ role: 'user', content: q })
   scrollToBottom()
 
+  // 前端拦截：检测是否是补充信息（入职时间、工龄等）
+  const isSupplementInfo = ['入职', '工龄', '年限', '工作满', '工作年限', '入职时间', '入职日期'].some(kw => q.includes(kw))
+  if (isSupplementInfo) {
+    // 尝试提取工龄
+    let years = 0
+    const yearMatch = q.match(/(\d+)\s*年/)
+    if (yearMatch) {
+      years = parseInt(yearMatch[1])
+    }
+
+    // 如果没有直接的年数，尝试从入职日期计算
+    if (years === 0) {
+      const dateMatch = q.match(/(\d{4})[.\-/年](\d{1,2})[.\-/月](\d{1,2})?/)
+      if (dateMatch) {
+        const joinYear = parseInt(dateMatch[1])
+        const currentYear = new Date().getFullYear()
+        years = currentYear - joinYear
+      }
+    }
+
+    // 计算年假天数
+    let annualLeave = 0
+    if (years >= 1 && years < 10) {
+      annualLeave = 5
+    } else if (years >= 10 && years < 20) {
+      annualLeave = 10
+    } else if (years >= 20) {
+      annualLeave = 15
+    }
+
+    let answer = ''
+    if (annualLeave > 0) {
+      answer = `根据您提供的信息，您的工龄约为 **${years}年**。\n\n`
+      answer += `按照公司年假制度：\n`
+      answer += `- 工龄1-10年：5天年假\n`
+      answer += `- 工龄10-20年：10天年假\n`
+      answer += `- 工龄20年以上：15天年假\n\n`
+      answer += `**您目前享有 ${annualLeave} 天年假。**\n\n`
+      answer += `温馨提示：年假需提前申请，请合理安排。`
+    } else {
+      answer = `感谢您提供的信息。根据您的情况，我需要确认更多细节才能准确计算年假天数。\n\n建议您联系HR部门确认具体的年假天数。`
+    }
+
+    chatStore.messages.push({
+      role: 'assistant',
+      content: answer,
+      answer_type: 'faq',
+      source_docs: [],
+      record_id: null,
+      feedback: null,
+      is_favorite: false,
+    })
+    scrollToBottom()
+    // 保存到后端
+    saveChatRecord({
+      question: q,
+      answer: answer,
+      answer_type: 'faq',
+      conversation_id: chatStore.currentConversationId
+    }).then(res => {
+      if (res.data?.conversation_id) {
+        chatStore.currentConversationId = res.data.conversation_id
+        chatStore.fetchConversations()
+      }
+    }).catch(() => {})
+    return
+  }
+
   // 前端拦截：澄清追问
   if (needsClarification(q)) {
     let answer = ''
@@ -539,12 +607,10 @@ async function sendMessage() {
     // 根据不同类型生成不同的澄清提示
     if (q.length < 4) {
       answer = '🤔 您的问题太简短了，我不太确定您想了解什么。\n\n请详细描述您想了解的内容，例如：\n- 请假需要提前多久申请？\n- 年假有几天？\n- 报销流程是什么？'
-    } else if (['这个', '那个', '它'].some(ref => q.includes(ref))) {
-      answer = '🤔 您的问题中有一些指代不明确的地方。\n\n请具体说明您指的是什么，例如：\n- 这个规定 → 具体是哪个规定？\n- 那个流程 → 具体是哪个流程？'
     } else if (['怎么办', '怎么弄'].some(req => q.includes(req)) && q.length < 10) {
       answer = '🤔 您想了解怎么办理什么事情呢？\n\n请补充具体事项，例如：\n- 怎么申请年假？\n- 怎么报销差旅费？\n- 怎么提交绩效申诉？'
-    } else if (q.includes('年假') && ['几天', '多少天'].some(kw => q.includes(kw))) {
-      answer = '🤔 年假天数根据工龄不同而不同，我需要确认您的情况。\n\n请补充以下任意一项：\n1. 您的入职日期\n2. 您的累计工作年限\n\n这样我就能准确告诉您有多少天年假了。'
+    } else if (q.includes('年假') && ['几天', '多少天', '有几天', '多少天'].some(kw => q.includes(kw))) {
+      answer = '🤔 年假天数根据工龄不同而不同，我需要确认您的情况。\n\n请补充以下任意一项：\n1. 您的入职日期（如：2020年1月1日）\n2. 您的累计工作年限（如：5年）\n\n这样我就能准确告诉您有多少天年假了。'
     } else {
       answer = '🤔 您的问题可能需要补充一些信息。\n\n请详细描述您想了解的内容，或者您可以尝试这样问：\n- 请假需要提前多久申请？\n- 绩效考核标准是什么？\n- 报销流程是怎样的？'
     }
