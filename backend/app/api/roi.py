@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.get("")
-def get_roi_report(current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def get_roi_report(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     now = datetime.now()
     month_ago = now - timedelta(days=30)
 

@@ -50,7 +50,7 @@ def create_ticket(data: TicketCreate, current_user: User = Depends(get_current_u
 
 
 @router.put("/{ticket_id}")
-def update_ticket(ticket_id: int, data: TicketUpdate, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def update_ticket(ticket_id: int, data: TicketUpdate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
     if not ticket:
         return error("工单不存在")
@@ -68,7 +68,7 @@ def update_ticket(ticket_id: int, data: TicketUpdate, current_user: User = Depen
 
 
 @router.get("/stats")
-def ticket_stats(current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def ticket_stats(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     total = db.query(Ticket).count()
     pending = db.query(Ticket).filter(Ticket.status == "pending").count()
     processing = db.query(Ticket).filter(Ticket.status == "processing").count()

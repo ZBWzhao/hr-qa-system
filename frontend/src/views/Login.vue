@@ -109,7 +109,7 @@ async function handleLogin() {
     userStore.setToken(res.data.access_token)
     userStore.setUser(res.data.user)
     ElMessage.success('登录成功')
-    router.push('/dashboard')
+    router.push(res.data.user.role === 'admin' ? '/user-management' : '/chat')
   } catch (e) {} finally {
     loading.value = false
   }

@@ -1,16 +1,22 @@
 import os
-os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 from sentence_transformers import SentenceTransformer
 from app.core.config import settings
 
 _model = None
 
+# 本地模型目录（无需下载）
+LOCAL_MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "backend", "models", "text2vec-base-chinese")
+
 
 def get_embedding_model() -> SentenceTransformer:
     global _model
     if _model is None:
-        _model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        model_path = os.path.abspath(LOCAL_MODEL_DIR)
+        if os.path.exists(model_path):
+            _model = SentenceTransformer(model_path)
+        else:
+            _model = SentenceTransformer(settings.EMBEDDING_MODEL)
     return _model
 
 

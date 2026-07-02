@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 @router.get("")
-def list_gaps(resolved: int = None, page: int = 1, page_size: int = 20, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def list_gaps(resolved: int = None, page: int = 1, page_size: int = 20, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     query = db.query(QAMiss)
     if resolved is not None:
         query = query.filter(QAMiss.resolved == resolved)
@@ -31,7 +31,7 @@ def list_gaps(resolved: int = None, page: int = 1, page_size: int = 20, current_
 
 
 @router.get("/stats")
-def gap_stats(current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def gap_stats(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     total = db.query(QAMiss).count()
     resolved = db.query(QAMiss).filter(QAMiss.resolved == 1).count()
     from sqlalchemy import func
@@ -48,7 +48,7 @@ def gap_stats(current_user: User = Depends(require_roles("hr", "admin")), db: Se
 
 
 @router.put("/{miss_id}/resolve")
-def resolve_gap(miss_id: int, doc_id: int = None, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def resolve_gap(miss_id: int, doc_id: int = None, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     miss = db.query(QAMiss).filter(QAMiss.id == miss_id).first()
     if not miss:
         return success(None, "记录不存在")

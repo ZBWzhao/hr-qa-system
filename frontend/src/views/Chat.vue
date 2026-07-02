@@ -20,36 +20,87 @@
       </div>
     </div>
 
-    <!-- 右侧聊天区域 -->
+    <!-- 中间聊天区域 -->
     <div class="chat-main">
       <div class="chat-messages" ref="messagesRef">
+        <!-- 欢迎屏 -->
         <div class="welcome" v-if="chatStore.messages.length === 0">
           <el-icon :size="60" color="#D97706"><ChatDotRound /></el-icon>
           <h2>HR 智能助手</h2>
-          <p>您好！我是公司HR制度智能问答助手，可以回答关于公司制度、考勤、休假、薪酬等问题。</p>
-          <div class="quick-questions">
-            <el-tag v-for="q in quickQuestions" :key="q" effect="plain" style="cursor: pointer; margin: 4px" @click="sendQuick(q)">{{ q }}</el-tag>
+          <p>我可以帮你查询公司制度，也可以在需要办理事项时，引导你补全信息并生成工单，确认后提交给 HR。<br>你可以直接提问，例如"年假怎么计算"，也可以说"我想申请开具在职证明"。</p>
+
+          <!-- 能力卡片 -->
+          <div class="capability-cards">
+            <div :class="['cap-card', { active: activeMode === 'policy' }]" @click="setMode('policy')">
+              <div class="cap-card-header">
+                <el-icon :size="24" color="#D97706"><Document /></el-icon>
+                <span class="cap-card-title">查制度</span>
+                <el-icon v-if="activeMode === 'policy'" class="cap-check" color="#D97706"><Select /></el-icon>
+              </div>
+              <div class="cap-card-desc">年假、请假、考勤、薪酬、福利等制度问题</div>
+              <div class="cap-card-example">示例：工作满3年有几天年假？</div>
+            </div>
+            <div :class="['cap-card', { active: activeMode === 'service' }]" @click="setMode('service')">
+              <div class="cap-card-header">
+                <el-icon :size="24" color="#D97706"><Tickets /></el-icon>
+                <span class="cap-card-title">办事项</span>
+                <el-icon v-if="activeMode === 'service'" class="cap-check" color="#D97706"><Select /></el-icon>
+              </div>
+              <div class="cap-card-desc">证明开具、信息变更、人工处理等 HR 请求</div>
+              <div class="cap-card-example">示例：我想申请开具在职证明</div>
+            </div>
+          </div>
+
+          <!-- 推荐问题 -->
+          <div class="quick-section">
+            <div class="quick-title">你可以这样问</div>
+            <div class="quick-questions">
+              <el-tag v-for="q in currentQuestions" :key="q" effect="plain" style="cursor: pointer; margin: 4px" @click="sendQuick(q)">{{ q }}</el-tag>
+            </div>
           </div>
         </div>
+
+        <!-- 消息列表 -->
         <div v-for="(msg, idx) in chatStore.messages" :key="idx" :class="['message', msg.role]">
           <el-avatar v-if="msg.role === 'user'" :size="36" style="background: #D97706; color: #fff">{{ userStore.userInfo.real_name?.[0] || 'U' }}</el-avatar>
           <el-avatar v-else :size="36" style="background: #D97706; color: #fff"><ChatDotRound /></el-avatar>
           <div class="message-content">
             <div class="message-bubble" :class="msg.role">
-              <div v-html="formatMessage(msg.content)"></div>
+              <div v-if="msg.ticket_confirm" class="ticket-confirm-card">
+                <div class="ticket-confirm-title">请确认以下工单信息：</div>
+                <div class="ticket-confirm-row" v-for="(val, key) in msg.ticket_draft" :key="key">
+                  <span class="ticket-confirm-label">{{ ticketFieldLabel(key) }}：</span>
+                  <span class="ticket-confirm-value">{{ val }}</span>
+                </div>
+                <div class="ticket-confirm-actions">
+                  <el-button type="primary" size="small" @click="confirmTicket(msg)">确认提交</el-button>
+                  <el-button size="small" @click="editTicket(msg)">继续修改</el-button>
+                </div>
+              </div>
+              <div v-else v-html="formatMessage(msg.content)"></div>
             </div>
+            <!-- 回答类型标签 -->
             <div v-if="msg.role === 'assistant' && msg.answer_type" class="answer-type-tag">
-              <el-tag v-if="msg.answer_type === 'faq'" type="success" size="small" effect="plain">FAQ 回答</el-tag>
-              <el-tag v-else-if="msg.answer_type === 'rule'" type="warning" size="small" effect="plain">规则回答</el-tag>
-              <el-tag v-else-if="msg.answer_type === 'rag'" type="primary" size="small" effect="plain">RAG 回答</el-tag>
-              <el-tag v-else-if="msg.answer_type === 'miss'" type="info" size="small" effect="plain">未命中</el-tag>
+              <el-tag v-if="msg.answer_type === 'faq'" type="success" size="small" effect="plain">标准答案</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'rule'" type="warning" size="small" effect="plain">规则答案</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'rag'" type="primary" size="small" effect="plain">已查阅制度文档</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'clarification'" type="info" size="small" effect="plain">需要补充信息</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'ticket_draft'" type="warning" size="small" effect="plain">工单申请</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'miss'" type="info" size="small" effect="plain">未找到明确依据</el-tag>
               <el-tag v-else size="small" effect="plain">{{ msg.answer_type }}</el-tag>
             </div>
+            <!-- 引用来源 -->
             <div v-if="msg.role === 'assistant' && msg.source_docs?.length" class="source-docs">
               <el-divider content-position="left"><span style="font-size: 12px; color: #9CA3AF">引用来源</span></el-divider>
-              <el-tag v-for="(doc, i) in msg.source_docs" :key="i" size="small" type="info" style="margin: 2px">{{ doc.title || doc.question || doc.name || '来源' + (i+1) }}</el-tag>
+              <el-tag v-for="(doc, i) in msg.source_docs" :key="i" size="small" type="info" style="margin: 2px">{{ docTitle(doc) }}</el-tag>
             </div>
-            <div v-if="msg.role === 'assistant' && msg.record_id" class="message-actions">
+            <!-- 未命中：转人工按钮 -->
+            <div v-if="msg.role === 'assistant' && msg.answer_type === 'miss'" class="miss-actions">
+              <el-button size="small" @click="focusInput">继续补充问题</el-button>
+              <el-button size="small" type="primary" @click="triggerTicketFlow('我需要 HR 人工处理问题')">转人工处理</el-button>
+            </div>
+            <!-- 操作按钮 -->
+            <div v-if="msg.role === 'assistant' && msg.record_id && !msg.ticket_confirm" class="message-actions">
               <el-button-group size="small">
                 <el-button @click="feedback(msg, 'useful')" :type="msg.feedback === 'useful' ? 'success' : ''"><el-icon><Select /></el-icon></el-button>
                 <el-button @click="feedback(msg, 'useless')" :type="msg.feedback === 'useless' ? 'danger' : ''"><el-icon><CloseBold /></el-icon></el-button>
@@ -60,6 +111,7 @@
             </div>
           </div>
         </div>
+        <!-- 加载动画 -->
         <div v-if="loading" class="message assistant">
           <el-avatar :size="36" style="background: #D97706; color: #fff"><ChatDotRound /></el-avatar>
           <div class="message-content">
@@ -70,40 +122,32 @@
         </div>
       </div>
       <div class="chat-input">
-        <div class="input-toolbar">
-          <el-tooltip content="语音问答 (Mock)" placement="top">
-            <el-button :icon="Microphone" circle size="small" @click="handleVoice" />
-          </el-tooltip>
-          <el-tooltip content="图片问答 (Mock)" placement="top">
-            <el-upload :show-file-list="false" :before-upload="handleImage" accept="image/*">
-              <el-button :icon="Picture" circle size="small" />
-            </el-upload>
-          </el-tooltip>
-          <el-tooltip content="新建对话" placement="top">
-            <el-button :icon="RefreshRight" circle size="small" @click="startNewChat" />
-          </el-tooltip>
-          <el-tooltip content="查看历史" placement="top">
-            <el-button :icon="Clock" circle size="small" @click="$router.push('/history')" />
-          </el-tooltip>
-        </div>
-        <el-input v-model="input" placeholder="请输入您的问题... (Shift+Enter换行，Enter发送)" size="large" type="textarea" :autosize="{ minRows: 1, maxRows: 4 }" @keydown="handleKeydown" :disabled="loading" />
+        <el-input v-model="input" :placeholder="inputPlaceholder" size="large" type="textarea" :autosize="{ minRows: 1, maxRows: 4 }" @keydown="handleKeydown" :disabled="loading" />
         <div style="display: flex; justify-content: flex-end; margin-top: 8px">
           <el-button type="primary" :icon="Promotion" @click="sendMessage" :loading="loading">发送</el-button>
         </div>
       </div>
     </div>
+
+    <!-- 右侧笔记区 -->
+    <div class="notes-panel">
+      <div class="notes-header">
+        <span style="font-weight: 600; color: #111827">📝 我的笔记</span>
+      </div>
+      <el-input v-model="notes" type="textarea" :autosize="false" placeholder="在这里记录笔记...&#10;&#10;可以记录对话要点、待办事项等" class="notes-textarea" />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Promotion, ChatDotRound, Star, Select, CloseBold, Microphone, Picture, RefreshRight, Clock, Plus, Delete } from '@element-plus/icons-vue'
-import { sendChat, voiceChat, imageChat } from '../api/chat'
-import { getRecommendations } from '../api/recommendations'
+import { Promotion, ChatDotRound, Star, Select, CloseBold, Plus, Delete, Document, Tickets } from '@element-plus/icons-vue'
+import { sendChat } from '../api/chat'
 import { createFeedback } from '../api/feedback'
 import { toggleFavorite } from '../api/chatHistory'
+import { createTicket } from '../api/tickets'
 import { useUserStore } from '../stores/user'
 import { useChatStore } from '../stores/chat'
 
@@ -114,23 +158,104 @@ const chatStore = useChatStore()
 const messagesRef = ref()
 const input = ref('')
 const loading = ref(false)
-const quickQuestions = ref(['年假怎么计算？', '请假需要提前多久？', '报销流程是什么？', '绩效申诉怎么提交？'])
+const notes = ref('')
 
-const dateGroupLabels = {
-  today: '今天',
-  yesterday: '昨天',
-  last_7_days: '近7天',
-  last_30_days: '近30天',
-  earlier: '更早',
+// ===== 能力模式 =====
+const activeMode = ref('policy')
+
+const policyQuestions = ref([
+  '请假需要提前多久申请？',
+  '年假怎么计算？',
+  '工作满3年有几天年假？',
+  '加班可以调休吗？',
+  '试用期多久？',
+  '绩效申诉怎么提交？',
+])
+
+const serviceQuestions = ref([
+  '我想申请开具在职证明',
+  '我要变更个人联系方式',
+  '我想提交考勤异常说明',
+  '我需要 HR 人工处理问题',
+  '我要咨询证明材料需要什么',
+  '我想申请补充薪资说明',
+])
+
+const currentQuestions = computed(() => activeMode.value === 'policy' ? policyQuestions.value : serviceQuestions.value)
+
+const inputPlaceholder = computed(() =>
+  activeMode.value === 'policy'
+    ? '请输入你想查询的制度问题，例如"年假怎么计算？"'
+    : '请输入你想办理的事项，例如"我想申请开具在职证明"'
+)
+
+function setMode(mode) {
+  activeMode.value = mode
 }
 
-function dateGroupLabel(label) {
-  return dateGroupLabels[label] || label
+// ===== 笔记 =====
+function notesKey(convId) { return convId ? `chat-notes-${convId}` : 'chat-notes-draft' }
+function loadNotes(convId) { notes.value = localStorage.getItem(notesKey(convId)) || '' }
+function saveNotes() { localStorage.setItem(notesKey(chatStore.currentConversationId), notes.value) }
+watch(notes, saveNotes)
+
+// ===== 工单引导 =====
+const ticketKeywords = ['申请', '办理', '开具', '证明', '信息变更', '转人工', '联系HR', '提交工单', '人工处理', '考勤异常']
+const ticketTypeMap = {
+  '证明': 'certify', '在职': 'certify', '开具': 'certify',
+  '变更': 'info_change', '修改': 'info_change', '联系方式': 'info_change',
+  '考勤': 'other', '异常': 'other',
 }
+let pendingTicketType = 'other'
+let pendingTicketTitle = ''
+
+function isTicketIntent(text) {
+  return ticketKeywords.some(kw => text.includes(kw))
+}
+
+function guessTicketType(text) {
+  for (const [kw, type] of Object.entries(ticketTypeMap)) {
+    if (text.includes(kw)) return type
+  }
+  return 'other'
+}
+
+function triggerTicketFlow(question) {
+  input.value = question
+  sendMessage()
+}
+
+// ===== 澄清追问 =====
+function needsClarification(text) {
+  const hasYearLeave = text.includes('年假')
+  const hasHowMany = ['几天', '多少天', '今年有几天'].some(kw => text.includes(kw))
+  const hasContext = ['入职', '工龄', '工作满', '几年', '年限'].some(kw => text.includes(kw))
+  return hasYearLeave && hasHowMany && !hasContext
+}
+
+// ===== 消息渲染 =====
+const dateGroupLabels = { today: '今天', yesterday: '昨天', last_7_days: '近7天', last_30_days: '近30天', earlier: '更早' }
+function dateGroupLabel(label) { return dateGroupLabels[label] || label }
 
 function formatMessage(text) {
   if (!text) return ''
   return text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+}
+
+function docTitle(doc) {
+  return doc.title || doc.question || doc.name || doc.faq_id ? ('FAQ #' + doc.faq_id) : doc.rule_id ? ('规则 #' + doc.rule_id) : doc.doc_id ? ('文档 #' + doc.doc_id) : '来源文档'
+}
+
+function ticketFieldLabel(key) {
+  const map = { type: '工单类型', title: '标题', purpose: '证明用途', recipient: '接收单位', stamp: '是否需要盖章', deadline: '期望完成时间', note: '补充说明', description: '描述' }
+  return map[key] || key
+}
+
+function focusInput() {
+  nextTick(() => {
+    const textarea = document.querySelector('.chat-input textarea')
+    if (textarea) textarea.focus()
+  })
 }
 
 function scrollToBottom() {
@@ -159,38 +284,100 @@ async function handleDeleteConv(convId) {
   try {
     await ElMessageBox.confirm('确定删除该对话？', '提示', { type: 'warning' })
     await chatStore.removeConversation(convId)
-    if (route.params.conversationId === convId) {
-      router.push('/chat')
-    }
+    if (route.params.conversationId === convId) router.push('/chat')
     ElMessage.success('已删除')
   } catch {}
 }
 
+// ===== 核心：发送消息 =====
 async function sendMessage() {
   const q = input.value.trim()
   if (!q || loading.value) return
   input.value = ''
   chatStore.messages.push({ role: 'user', content: q })
   scrollToBottom()
-  loading.value = true
-  try {
-    const res = await sendChat({ question: q, conversation_id: chatStore.currentConversationId })
-    const convId = res.data.conversation_id
-    chatStore.currentConversationId = convId
+
+  // 前端拦截：澄清追问
+  if (needsClarification(q)) {
     chatStore.messages.push({
       role: 'assistant',
-      content: res.data.answer,
-      answer_type: res.data.answer_type,
-      source_docs: res.data.source_docs,
-      record_id: res.data.record_id,
+      content: '我需要先确认你的工龄或入职日期，才能准确计算年假天数。\n请补充以下任意一项：\n1. 入职日期\n2. 累计工作年限',
+      answer_type: 'clarification',
+      source_docs: [],
+      record_id: null,
       feedback: null,
       is_favorite: false,
     })
-    // 更新URL（不触发路由跳转）
-    if (route.params.conversationId !== convId) {
+    scrollToBottom()
+    return
+  }
+
+  // 前端拦截：工单引导
+  if (isTicketIntent(q)) {
+    pendingTicketType = guessTicketType(q)
+    pendingTicketTitle = q.replace(/^(我想|我要|我需要|我|请)/, '').trim() || '人工请求'
+    chatStore.messages.push({
+      role: 'assistant',
+      content: `可以，我将帮你生成"${pendingTicketTitle}"申请。请补充以下信息：\n1. 具体原因或用途\n2. 期望完成时间\n3. 其他补充说明（可选）`,
+      answer_type: 'ticket_draft',
+      source_docs: [],
+      record_id: null,
+      feedback: null,
+      is_favorite: false,
+      ticket_step: 1,
+    })
+    scrollToBottom()
+    return
+  }
+
+  // 工单流程 Step 2：收集信息后展示确认卡片
+  const lastMsg = chatStore.messages[chatStore.messages.length - 2]
+  if (lastMsg?.ticket_step === 1) {
+    const ticketDraft = {
+      type: pendingTicketType === 'certify' ? '证明开具' : pendingTicketType === 'info_change' ? '信息变更' : '其他',
+      title: pendingTicketTitle,
+      description: q,
+    }
+    chatStore.messages.push({
+      role: 'assistant',
+      content: '',
+      answer_type: 'ticket_draft',
+      source_docs: [],
+      record_id: null,
+      feedback: null,
+      is_favorite: false,
+      ticket_confirm: true,
+      ticket_draft: ticketDraft,
+    })
+    scrollToBottom()
+    return
+  }
+
+  // 正常调用后端
+  loading.value = true
+  try {
+    const res = await sendChat({ question: q, conversation_id: chatStore.currentConversationId })
+    const data = res.data
+    chatStore.messages.push({
+      role: 'assistant',
+      content: data.answer,
+      answer_type: data.answer_type,
+      source_docs: data.source_docs || [],
+      record_id: data.record_id,
+      feedback: null,
+      is_favorite: false,
+    })
+    // 更新URL
+    const convId = data.conversation_id
+    if (convId && route.params.conversationId !== convId) {
+      const draftNotes = localStorage.getItem(notesKey(null)) || ''
+      if (draftNotes && !localStorage.getItem(notesKey(convId))) {
+        localStorage.setItem(notesKey(convId), draftNotes)
+        localStorage.removeItem(notesKey(null))
+      }
+      chatStore.currentConversationId = convId
       router.replace('/chat/' + convId)
     }
-    // 刷新侧边栏
     chatStore.fetchConversations()
   } catch (e) {
     chatStore.messages.push({ role: 'assistant', content: '抱歉，发生了错误，请稍后重试。' })
@@ -205,41 +392,36 @@ function sendQuick(q) {
   sendMessage()
 }
 
-async function handleVoice() {
+// ===== 工单确认提交 =====
+async function confirmTicket(msg) {
   loading.value = true
   try {
-    const res = await voiceChat()
-    chatStore.messages.push({ role: 'user', content: `[语音输入] ${res.data.recognized_text}` })
-    chatStore.messages.push({
-      role: 'assistant', content: res.data.answer, answer_type: 'mock',
-      source_docs: [], record_id: null, feedback: null, is_favorite: false,
+    const res = await createTicket({
+      type: msg.ticket_draft.type === '证明开具' ? 'certify' : msg.ticket_draft.type === '信息变更' ? 'info_change' : 'other',
+      title: msg.ticket_draft.title,
+      description: msg.ticket_draft.description || '',
     })
-    scrollToBottom()
+    const ticketNo = res.data?.ticket_no || '未知'
+    // 替换确认卡片为提交成功消息
+    msg.ticket_confirm = false
+    msg.content = `已提交人工请求，工单编号：${ticketNo}。你可以在"我的 - 人工请求"中查看处理进度。`
+    msg.record_id = res.data?.id || null
+    ElMessage.success('工单已提交')
+    chatStore.fetchConversations()
   } catch (e) {
-    ElMessage.error('语音识别失败')
+    ElMessage.error('提交失败，请稍后重试')
   } finally {
     loading.value = false
   }
 }
 
-async function handleImage(file) {
-  loading.value = true
-  try {
-    const res = await imageChat()
-    chatStore.messages.push({ role: 'user', content: `[图片上传] ${res.data.ocr_text}` })
-    chatStore.messages.push({
-      role: 'assistant', content: res.data.answer, answer_type: 'mock',
-      source_docs: [], record_id: null, feedback: null, is_favorite: false,
-    })
-    scrollToBottom()
-  } catch (e) {
-    ElMessage.error('图片识别失败')
-  } finally {
-    loading.value = false
-  }
-  return false
+function editTicket(msg) {
+  msg.ticket_confirm = false
+  msg.content = '好的，请告诉我需要修改的内容，我会重新整理工单信息。'
+  msg.answer_type = 'ticket_draft'
 }
 
+// ===== 反馈 =====
 async function feedback(msg, type) {
   try {
     await createFeedback({ record_id: msg.record_id, feedback_type: type })
@@ -256,28 +438,21 @@ async function toggleFav(msg) {
   } catch (e) {}
 }
 
-// 路由参数变化时加载对应对话
+// ===== 路由 =====
 watch(() => route.params.conversationId, (newId) => {
-  if (newId) {
-    chatStore.loadConversation(newId)
-  } else {
-    chatStore.clearCurrentConversation()
-  }
+  if (newId) chatStore.loadConversation(newId)
+  else chatStore.clearCurrentConversation()
+  loadNotes(newId)
 })
 
 onMounted(async () => {
-  // 加载对话列表
   chatStore.fetchConversations()
-  // 加载推荐问题
-  try {
-    const res = await getRecommendations()
-    if (res.data?.length) quickQuestions.value = res.data.map(r => r.question)
-  } catch (e) {}
-  // 如果URL带conversationId，加载该对话
   if (route.params.conversationId) {
     chatStore.loadConversation(route.params.conversationId)
+    loadNotes(route.params.conversationId)
+  } else {
+    loadNotes(null)
   }
-  // 如果URL带q参数，直接发送
   if (route.query.q) {
     input.value = route.query.q
     sendMessage()
@@ -301,10 +476,29 @@ onMounted(async () => {
 .empty-hint { text-align: center; color: #9CA3AF; padding: 40px 20px; font-size: 14px; }
 .chat-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .chat-messages { flex: 1; overflow-y: auto; padding: 24px; }
-.welcome { text-align: center; padding: 80px 20px; }
-.welcome h2 { margin: 16px 0 8px; color: #111827; font-weight: 700; letter-spacing: -0.3px; }
-.welcome p { color: #9CA3AF; margin-bottom: 24px; font-size: 15px; }
+
+/* 欢迎屏 */
+.welcome { text-align: center; padding: 48px 20px 24px; }
+.welcome h2 { margin: 16px 0 8px; color: #111827; font-weight: 700; font-size: 24px; letter-spacing: -0.3px; }
+.welcome p { color: #6B7280; margin-bottom: 28px; font-size: 14px; line-height: 1.8; max-width: 520px; margin-left: auto; margin-right: auto; }
+
+/* 能力卡片 */
+.capability-cards { display: flex; gap: 16px; justify-content: center; margin-bottom: 28px; max-width: 520px; margin-left: auto; margin-right: auto; }
+.cap-card { flex: 1; padding: 20px; border: 2px solid #e5e7eb; border-radius: 12px; cursor: pointer; text-align: left; transition: all 0.2s; background: #fff; }
+.cap-card:hover { border-color: #fbbf24; }
+.cap-card.active { border-color: #D97706; background: #FFF7ED; }
+.cap-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cap-card-title { font-size: 16px; font-weight: 600; color: #111827; }
+.cap-check { margin-left: auto; }
+.cap-card-desc { font-size: 13px; color: #6B7280; margin-bottom: 8px; }
+.cap-card-example { font-size: 12px; color: #9CA3AF; font-style: italic; }
+
+/* 推荐问题 */
+.quick-section { max-width: 520px; margin: 0 auto; }
+.quick-title { font-size: 13px; color: #9CA3AF; margin-bottom: 10px; }
 .quick-questions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+
+/* 消息 */
 .message { display: flex; gap: 12px; margin-bottom: 24px; }
 .message.user { flex-direction: row-reverse; }
 .message-content { max-width: 70%; }
@@ -314,11 +508,29 @@ onMounted(async () => {
 .message-actions { margin-top: 8px; display: flex; gap: 8px; }
 .answer-type-tag { margin-top: 6px; }
 .source-docs { margin-top: 8px; }
+.miss-actions { margin-top: 10px; display: flex; gap: 8px; }
+
+/* 工单确认卡片 */
+.ticket-confirm-card { font-size: 14px; }
+.ticket-confirm-title { font-weight: 600; margin-bottom: 12px; color: #111827; }
+.ticket-confirm-row { margin-bottom: 6px; line-height: 1.6; }
+.ticket-confirm-label { color: #6B7280; }
+.ticket-confirm-value { color: #111827; font-weight: 500; }
+.ticket-confirm-actions { margin-top: 16px; display: flex; gap: 8px; }
+
+/* 加载动画 */
 .loading-bubble { display: flex; gap: 6px; align-items: center; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #D97706; opacity: 0.4; animation: bounce 1.4s infinite ease-in-out both; }
 .dot:nth-child(1) { animation-delay: -0.32s; }
 .dot:nth-child(2) { animation-delay: -0.16s; }
 @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+/* 输入框 */
 .chat-input { padding: 16px 20px; border-top: 1px solid #f3f4f6; }
-.input-toolbar { display: flex; gap: 8px; margin-bottom: 8px; }
+
+/* 笔记区 */
+.notes-panel { width: 280px; border-left: 1px solid #f3f4f6; display: flex; flex-direction: column; background: #fafafa; flex-shrink: 0; }
+.notes-header { padding: 16px; border-bottom: 1px solid #f3f4f6; }
+.notes-textarea { flex: 1; }
+.notes-textarea :deep(.el-textarea__inner) { height: 100% !important; border: none; border-radius: 0; resize: none; background: transparent; box-shadow: none; padding: 16px; font-size: 13px; line-height: 1.8; }
 </style>

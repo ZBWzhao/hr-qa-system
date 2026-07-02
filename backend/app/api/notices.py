@@ -52,7 +52,7 @@ def get_notice(notice_id: int, current_user: User = Depends(get_current_user), d
 
 
 @router.post("")
-def create_notice(data: NoticeCreate, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def create_notice(data: NoticeCreate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     notice = Notice(title=data.title, content=data.content, notice_type=data.notice_type, is_pinned=data.is_pinned, publisher_id=current_user.id, expire_at=data.expire_at)
     db.add(notice)
     db.commit()
@@ -61,7 +61,7 @@ def create_notice(data: NoticeCreate, current_user: User = Depends(require_roles
 
 
 @router.put("/{notice_id}")
-def update_notice(notice_id: int, data: NoticeUpdate, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def update_notice(notice_id: int, data: NoticeUpdate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     notice = db.query(Notice).filter(Notice.id == notice_id).first()
     if not notice:
         return error("通知不存在")
@@ -81,7 +81,7 @@ def update_notice(notice_id: int, data: NoticeUpdate, current_user: User = Depen
 
 
 @router.delete("/{notice_id}")
-def delete_notice(notice_id: int, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def delete_notice(notice_id: int, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     notice = db.query(Notice).filter(Notice.id == notice_id).first()
     if not notice:
         return error("通知不存在")

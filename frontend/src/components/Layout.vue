@@ -1,13 +1,13 @@
 <template>
   <el-container style="height: 100vh">
-    <el-aside :width="isCollapse ? '64px' : '220px'" class="sidebar">
-      <div class="logo" :style="{ padding: isCollapse ? '20px 8px' : '20px 20px' }">
+    <el-aside width="220px" class="sidebar">
+      <div class="logo" style="padding: 20px 20px">
         <el-icon :size="22" color="#D97706"><ChatDotRound /></el-icon>
-        <span v-if="!isCollapse" class="logo-text">HR Copilot</span>
+        <span class="logo-text">HR Copilot</span>
       </div>
       <el-menu
         :default-active="$route.path"
-        :collapse="isCollapse"
+        :collapse="false"
         background-color="transparent"
         text-color="#6B7280"
         active-text-color="#D97706"
@@ -15,81 +15,76 @@
         :collapse-transition="false"
         class="sidebar-menu"
       >
-        <el-menu-item index="/dashboard">
-          <el-icon><HomeFilled /></el-icon>
-          <template #title>首页</template>
-        </el-menu-item>
-        <el-menu-item index="/chat">
-          <el-icon><ChatDotRound /></el-icon>
-          <template #title>智能问答</template>
-        </el-menu-item>
-        <el-menu-item index="/search">
-          <el-icon><Search /></el-icon>
-          <template #title>关键词搜索</template>
-        </el-menu-item>
-        <el-menu-item index="/faqs">
-          <el-icon><QuestionFilled /></el-icon>
-          <template #title>FAQ</template>
-        </el-menu-item>
-        <el-menu-item index="/notices">
-          <el-icon><Bell /></el-icon>
-          <template #title>通知公告</template>
-          <el-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" class="notice-badge" />
-        </el-menu-item>
-        <el-menu-item index="/tickets">
-          <el-icon><Tickets /></el-icon>
-          <template #title>工单系统</template>
-        </el-menu-item>
-        <el-menu-item index="/history">
-          <el-icon><Clock /></el-icon>
-          <template #title>问答历史</template>
-        </el-menu-item>
-        <el-menu-item index="/feedback">
-          <el-icon><Comment /></el-icon>
-          <template #title>反馈纠错</template>
-        </el-menu-item>
-        <el-menu-item index="/comments">
-          <el-icon><ChatLineSquare /></el-icon>
-          <template #title>评论讨论</template>
-        </el-menu-item>
-        <el-menu-item index="/onboarding">
-          <el-icon><Reading /></el-icon>
-          <template #title>入职引导</template>
-        </el-menu-item>
-        <el-menu-item index="/reminders">
-          <el-icon><AlarmClock /></el-icon>
-          <template #title>到期提醒</template>
-        </el-menu-item>
-        <template v-if="userStore.isHR">
-          <el-sub-menu index="hr-menu">
+        <!-- 员工端：精简为3个入口 -->
+        <template v-if="!userStore.isHR && !userStore.isAdmin">
+          <el-menu-item index="/chat">
+            <el-icon><ChatDotRound /></el-icon>
+            <template #title>智能问答</template>
+          </el-menu-item>
+          <el-menu-item index="/notices">
+            <el-icon><Bell /></el-icon>
             <template #title>
-              <el-icon><Setting /></el-icon>
-              <span>HR管理</span>
+              <div style="display: flex; align-items: center; width: 100%">
+                <span>通知公告</span>
+                <el-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" style="margin-left: auto; margin-top: -6px" />
+              </div>
             </template>
-            <el-menu-item index="/documents">制度文档</el-menu-item>
-            <el-menu-item index="/rules">规则问答</el-menu-item>
-            <el-menu-item index="/statistics">数据统计</el-menu-item>
-            <el-menu-item index="/gaps">知识缺口</el-menu-item>
-            <el-menu-item index="/roi">ROI分析</el-menu-item>
-          </el-sub-menu>
+          </el-menu-item>
+          <el-menu-item index="/my">
+            <el-icon><User /></el-icon>
+            <template #title>我的</template>
+          </el-menu-item>
         </template>
+
+        <!-- HR端：知识库运营 -->
+        <template v-if="userStore.isHR">
+          <el-menu-item index="/documents">
+            <el-icon><Folder /></el-icon>
+            <template #title>知识库管理</template>
+          </el-menu-item>
+          <el-menu-item index="/faqs">
+            <el-icon><QuestionFilled /></el-icon>
+            <template #title>标准答案库</template>
+          </el-menu-item>
+          <el-menu-item index="/feedback">
+            <el-icon><Comment /></el-icon>
+            <template #title>反馈处理</template>
+          </el-menu-item>
+          <el-menu-item index="/gaps">
+            <el-icon><Warning /></el-icon>
+            <template #title>知识缺口</template>
+          </el-menu-item>
+          <el-menu-item index="/notices">
+            <el-icon><Bell /></el-icon>
+            <template #title>通知发布</template>
+          </el-menu-item>
+          <el-menu-item index="/statistics">
+            <el-icon><DataAnalysis /></el-icon>
+            <template #title>数据看板</template>
+          </el-menu-item>
+        </template>
+
+        <!-- 管理员端：运维管理 -->
         <template v-if="userStore.isAdmin">
-          <el-sub-menu index="admin-menu">
-            <template #title>
-              <el-icon><UserFilled /></el-icon>
-              <span>系统管理</span>
-            </template>
-            <el-menu-item index="/user-management">用户管理</el-menu-item>
-            <el-menu-item index="/department-management">部门管理</el-menu-item>
-          </el-sub-menu>
+          <el-menu-item index="/user-management">
+            <el-icon><UserFilled /></el-icon>
+            <template #title>用户与角色</template>
+          </el-menu-item>
+          <el-menu-item index="/department-management">
+            <el-icon><OfficeBuilding /></el-icon>
+            <template #title>系统配置</template>
+          </el-menu-item>
+          <el-menu-item index="/documents">
+            <el-icon><Folder /></el-icon>
+            <template #title>数据维护</template>
+          </el-menu-item>
         </template>
       </el-menu>
     </el-aside>
     <el-container>
       <el-header class="top-header">
         <div style="display: flex; align-items: center">
-          <el-icon :size="20" style="cursor: pointer; color: #6B7280" @click="isCollapse = !isCollapse"><Fold v-if="!isCollapse" /><Expand v-else /></el-icon>
-          <el-breadcrumb separator="/" style="margin-left: 16px">
+          <el-breadcrumb separator="/">
             <el-breadcrumb-item>{{ $route.meta.title || '首页' }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
@@ -122,7 +117,6 @@ import { getUnreadCount } from '../api/notices'
 
 const router = useRouter()
 const userStore = useUserStore()
-const isCollapse = ref(true)
 const unreadCount = ref(0)
 
 async function fetchUnread() {
@@ -172,6 +166,7 @@ onMounted(() => {
   margin-bottom: 2px;
   height: 40px;
   line-height: 40px;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 .sidebar-menu .el-menu-item:hover,
 .sidebar-menu :deep(.el-sub-menu__title:hover) {
@@ -181,12 +176,6 @@ onMounted(() => {
   background-color: #FFF7ED;
   color: #D97706;
   font-weight: 500;
-}
-.notice-badge {
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
 }
 .top-header {
   display: flex;
@@ -207,6 +196,12 @@ onMounted(() => {
 }
 :global(.el-popper.el-menu__tooltip) {
   transition: opacity 0.08s ease-out !important;
+}
+/* 防止菜单项hover时的闪烁 */
+.sidebar-menu .el-menu-item,
+.sidebar-menu :deep(.el-sub-menu) {
+  will-change: background-color;
+  transform: translateZ(0);
 }
 
 @media (max-width: 768px) {

@@ -36,13 +36,13 @@ def list_reminders(current_user: User = Depends(get_current_user), db: Session =
 
 
 @router.get("/rules")
-def list_rules(current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def list_rules(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     rules = db.query(ReminderRule).all()
     return success([ReminderRuleOut.model_validate(r).model_dump() for r in rules])
 
 
 @router.post("/rules")
-def create_rule(data: ReminderRuleCreate, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def create_rule(data: ReminderRuleCreate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     rule = ReminderRule(name=data.name, rule_type=data.rule_type, trigger_days=data.trigger_days, target_role=data.target_role, channels=data.channels, template=data.template)
     db.add(rule)
     db.commit()
@@ -51,7 +51,7 @@ def create_rule(data: ReminderRuleCreate, current_user: User = Depends(require_r
 
 
 @router.put("/rules/{rule_id}")
-def update_rule(rule_id: int, data: ReminderRuleUpdate, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def update_rule(rule_id: int, data: ReminderRuleUpdate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     rule = db.query(ReminderRule).filter(ReminderRule.id == rule_id).first()
     if not rule:
         return error("规则不存在")

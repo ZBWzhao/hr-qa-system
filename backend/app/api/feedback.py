@@ -62,7 +62,7 @@ def list_feedback(status: Optional[str] = None, page: int = 1, page_size: int = 
 
 
 @router.put("/{feedback_id}/handle")
-def handle_feedback(feedback_id: int, data: FeedbackHandle, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def handle_feedback(feedback_id: int, data: FeedbackHandle, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     feedback = db.query(QAFeedback).filter(QAFeedback.id == feedback_id).first()
     if not feedback:
         return error("反馈不存在")
@@ -84,7 +84,7 @@ def handle_feedback(feedback_id: int, data: FeedbackHandle, current_user: User =
 
 
 @router.get("/stats")
-def feedback_stats(current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def feedback_stats(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     total = db.query(QAFeedback).count()
     handled = db.query(QAFeedback).filter(QAFeedback.status != "pending").count()
     return success({"total": total, "handled": handled, "pending": total - handled, "handle_rate": round(handled / total * 100, 1) if total > 0 else 0})

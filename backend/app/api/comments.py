@@ -42,7 +42,7 @@ def like_comment(comment_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{comment_id}/adopt")
-def adopt_comment(comment_id: int, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def adopt_comment(comment_id: int, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         return error("评论不存在")
@@ -52,7 +52,7 @@ def adopt_comment(comment_id: int, current_user: User = Depends(require_roles("h
 
 
 @router.delete("/{comment_id}")
-def delete_comment(comment_id: int, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def delete_comment(comment_id: int, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
     if not comment:
         return error("评论不存在")

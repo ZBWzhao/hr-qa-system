@@ -24,7 +24,7 @@ def list_faqs(category: Optional[str] = None, keyword: Optional[str] = None, pag
 
 
 @router.get("/all")
-def list_all_faqs(page: int = 1, page_size: int = 20, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def list_all_faqs(page: int = 1, page_size: int = 20, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     query = db.query(FAQ)
     total = query.count()
     items = query.order_by(FAQ.sort_order.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -42,7 +42,7 @@ def get_faq(faq_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("")
-def create_faq(data: FAQCreate, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def create_faq(data: FAQCreate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     faq = FAQ(question=data.question, answer=data.answer, category=data.category, keywords=data.keywords, sort_order=data.sort_order, created_by=current_user.id)
     db.add(faq)
     db.commit()
@@ -51,7 +51,7 @@ def create_faq(data: FAQCreate, current_user: User = Depends(require_roles("hr",
 
 
 @router.put("/{faq_id}")
-def update_faq(faq_id: int, data: FAQUpdate, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def update_faq(faq_id: int, data: FAQUpdate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     faq = db.query(FAQ).filter(FAQ.id == faq_id).first()
     if not faq:
         return error("FAQ不存在")
@@ -73,7 +73,7 @@ def update_faq(faq_id: int, data: FAQUpdate, current_user: User = Depends(requir
 
 
 @router.delete("/{faq_id}")
-def delete_faq(faq_id: int, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+def delete_faq(faq_id: int, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     faq = db.query(FAQ).filter(FAQ.id == faq_id).first()
     if not faq:
         return error("FAQ不存在")
