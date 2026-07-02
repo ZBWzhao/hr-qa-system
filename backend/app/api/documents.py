@@ -1,5 +1,6 @@
 import os
 import re
+import tempfile
 from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, UploadFile, File, Form
@@ -251,6 +252,81 @@ def archive_document(doc_id: int, current_user: User = Depends(require_roles("hr
     doc.status = "archived"
     db.commit()
     return success(None, "归档成功")
+
+
+@router.post("/{doc_id}/unarchive")
+def unarchive_document(doc_id: int, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        return error("文档不存在")
+    doc.status = "draft"
+    db.commit()
+    return success(None, "下架成功")
+
+
+@router.post("/classify")
+def classify_document(file: UploadFile = File(...)):
+    """根据文档内容自动分类"""
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "unknown"
+    content = ""
+
+    try:
+        if ext in ("txt", "md"):
+            raw = file.file.read()
+            for enc in ("utf-8", "utf-8-sig", "utf-16", "gbk", "gb2312", "latin-1"):
+                try:
+                    content = raw.decode(enc)
+                    break
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+        elif ext == "docx":
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
+                tmp.write(file.file.read())
+                tmp_path = tmp.name
+            content = extract_docx_text(tmp_path) or ""
+            os.unlink(tmp_path)
+        elif ext == "pdf":
+            try:
+                import fitz  # PyMuPDF
+                raw = file.file.read()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                    tmp.write(raw)
+                    tmp_path = tmp.name
+                doc = fitz.open(tmp_path)
+                content = "\n".join([page.get_text() for page in doc])
+                doc.close()
+                os.unlink(tmp_path)
+            except ImportError:
+                return error("PDF解析需要安装PyMuPDF库")
+    except Exception as e:
+        return error(f"文件读取失败: {str(e)}")
+
+    if not content.strip():
+        return success({"category": "other", "confidence": 0})
+
+    # 分类关键词映射
+    category_keywords = {
+        "attendance": ["考勤", "打卡", "签到", "迟到", "早退", "旷工", "出勤", "加班", "工时", "排班"],
+        "salary": ["薪酬", "工资", "薪资", "奖金", "绩效工资", "提成", "补贴", "津贴", "社保", "公积金", "五险一金"],
+        "benefit": ["福利", "体检", "节日", "礼品", "团建", "活动", "保险", "商业保险", "补充医疗"],
+        "leave": ["休假", "请假", "年假", "病假", "事假", "婚假", "产假", "陪产假", "丧假", "调休", "假期"],
+        "performance": ["绩效", "考核", "KPI", "OKR", "目标", "评估", "评分", "晋升", "升职", "述职"]
+    }
+
+    scores = {}
+    for cat, keywords in category_keywords.items():
+        score = sum(content.count(kw) for kw in keywords)
+        scores[cat] = score
+
+    total = sum(scores.values())
+    if total == 0:
+        return success({"category": "other", "confidence": 0})
+
+    best_cat = max(scores, key=scores.get)
+    confidence = round(scores[best_cat] / total * 100)
+
+    return success({"category": best_cat, "confidence": confidence})
 
 
 @router.get("/{doc_id}/chunks")

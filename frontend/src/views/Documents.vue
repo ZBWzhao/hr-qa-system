@@ -51,6 +51,7 @@
               <el-button size="small" type="primary" @click="showEdit(row)">编辑</el-button>
               <el-button v-if="row.status === 'draft'" size="small" type="success" @click="handlePublish(row)">发布</el-button>
               <el-button v-if="row.status === 'published'" size="small" type="warning" @click="handleArchive(row)">归档</el-button>
+              <el-button v-if="row.status === 'archived'" size="small" type="success" @click="handleUnarchive(row)">下架</el-button>
               <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
             </template>
           </div>
@@ -64,14 +65,23 @@
       <el-form :model="form" label-width="80px">
         <el-form-item label="标题"><el-input v-model="form.title" placeholder="留空则使用文件名" /></el-form-item>
         <el-form-item label="分类">
-          <el-select v-model="form.category">
-            <el-option label="考勤" value="attendance" />
-            <el-option label="薪酬" value="salary" />
-            <el-option label="福利" value="benefit" />
-            <el-option label="休假" value="leave" />
-            <el-option label="绩效" value="performance" />
-            <el-option label="其他" value="other" />
-          </el-select>
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+            <el-select v-model="form.category" style="width: 200px">
+              <el-option label="考勤" value="attendance" />
+              <el-option label="薪酬" value="salary" />
+              <el-option label="福利" value="benefit" />
+              <el-option label="休假" value="leave" />
+              <el-option label="绩效" value="performance" />
+              <el-option label="其他" value="other" />
+            </el-select>
+            <template v-if="classifying">
+              <el-icon class="is-loading" style="color: #D97706"><Loading /></el-icon>
+              <span style="color: #9CA3AF; font-size: 13px">正在分析文档分类...</span>
+            </template>
+            <template v-else-if="categoryConfidence">
+              <el-tag type="success" size="small">置信度: {{ categoryConfidence }}%</el-tag>
+            </template>
+          </div>
         </el-form-item>
         <el-form-item label="上传文件">
           <el-upload
@@ -81,11 +91,11 @@
             :on-change="handleFileChange"
             :on-remove="handleFileRemove"
             :on-exceed="() => ElMessage.warning('只能上传一个文件')"
-            accept=".txt,.md,.docx"
+            accept=".txt,.md,.docx,.pdf"
           >
             <el-button type="primary" size="small">选择文件</el-button>
             <template #tip>
-              <div style="color: #9CA3AF; font-size: 12px; margin-top: 4px">支持 txt、md、docx 格式，不支持 pdf/xlsx/exe/zip（可选，与手动录入内容合并）</div>
+              <div style="color: #9CA3AF; font-size: 12px; margin-top: 4px">支持 txt、md、docx、pdf 格式（可选，与手动录入内容合并）</div>
             </template>
           </el-upload>
         </el-form-item>
@@ -137,8 +147,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Search } from '@element-plus/icons-vue'
-import { getDocuments, createDocument, updateDocument, deleteDocument, publishDocument, archiveDocument, getDocument } from '../api/documents'
+import { Document, Search, Loading } from '@element-plus/icons-vue'
+import { getDocuments, createDocument, updateDocument, deleteDocument, publishDocument, archiveDocument, getDocument, classifyDocument } from '../api/documents'
 import { useUserStore } from '../stores/user'
 
 const route = useRoute()
@@ -154,6 +164,8 @@ const form = reactive({ title: '', category: 'other', content_text: '' })
 const selectedFile = ref(null)
 const detailVisible = ref(false)
 const detail = ref({})
+const classifying = ref(false)
+const categoryConfidence = ref(null)
 
 function categoryLabel(c) {
   return { attendance: '考勤', salary: '薪酬', benefit: '福利', leave: '休假', performance: '绩效', other: '其他' }[c] || c
@@ -179,6 +191,7 @@ async function fetchData() {
 function showDialog() {
   editId.value = null
   selectedFile.value = null
+  categoryConfidence.value = null
   Object.assign(form, { title: '', category: 'other', content_text: '' })
   dialogVisible.value = true
 }
@@ -200,8 +213,8 @@ function handleFileChange(file) {
     ElMessage.error(`不支持上传 ${ext} 格式文件`)
     return false
   }
-  if (['pdf', 'xlsx', 'xls'].includes(ext)) {
-    ElMessage.warning('暂不支持解析该格式，请使用 txt/md/docx 或手动录入')
+  if (['xlsx', 'xls'].includes(ext)) {
+    ElMessage.warning('暂不支持解析该格式，请使用 txt/md/docx/pdf 或手动录入')
     return false
   }
   if (file.size === 0) {
@@ -212,10 +225,31 @@ function handleFileChange(file) {
   if (!form.title) {
     form.title = file.name.replace(/\.[^.]+$/, '')
   }
+  // 触发自动分类
+  autoClassify(file.raw)
 }
 
 function handleFileRemove() {
   selectedFile.value = null
+  categoryConfidence.value = null
+}
+
+async function autoClassify(file) {
+  classifying.value = true
+  categoryConfidence.value = null
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await classifyDocument(fd)
+    if (res.data?.category) {
+      form.category = res.data.category
+      categoryConfidence.value = res.data.confidence || 0
+    }
+  } catch (e) {
+    // 分类失败不影响上传
+  } finally {
+    classifying.value = false
+  }
 }
 
 async function handleSubmit() {
@@ -255,6 +289,13 @@ async function handleArchive(row) {
   await ElMessageBox.confirm('确认归档该文档？', '提示')
   await archiveDocument(row.id)
   ElMessage.success('归档成功')
+  fetchData()
+}
+
+async function handleUnarchive(row) {
+  await ElMessageBox.confirm('确认下架该文档？下架后将变为草稿状态。', '提示')
+  await unarchiveDocument(row.id)
+  ElMessage.success('下架成功')
   fetchData()
 }
 

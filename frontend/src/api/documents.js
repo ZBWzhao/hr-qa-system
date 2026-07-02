@@ -28,6 +28,14 @@ export function archiveDocument(docId) {
   return request.post(`/documents/${docId}/archive`)
 }
 
+export function unarchiveDocument(docId) {
+  return request.post(`/documents/${docId}/unarchive`)
+}
+
+export function classifyDocument(formData) {
+  return request.post('/documents/classify', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+}
+
 export function getDocumentChunks(docId) {
   return request.get(`/documents/${docId}/chunks`)
 }
