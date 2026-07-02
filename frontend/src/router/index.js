@@ -25,12 +25,14 @@ const routes = [
       { path: 'search', name: 'Search', component: () => import('../views/Search.vue'), meta: { title: '关键词搜索' } },
       { path: 'documents', name: 'Documents', component: () => import('../views/Documents.vue'), meta: { title: '制度文档', roles: ['hr', 'admin'] } },
       { path: 'faqs', name: 'FAQs', component: () => import('../views/FAQs.vue'), meta: { title: '标准答案库' } },
+      { path: 'knowledge', name: 'KnowledgeManage', component: () => import('../views/KnowledgeManage.vue'), meta: { title: '知识管理', roles: ['hr', 'admin'] } },
       { path: 'rules', name: 'Rules', component: () => import('../views/Rules.vue'), meta: { title: '规则问答', roles: ['hr'] } },
       { path: 'history', name: 'ChatHistory', component: () => import('../views/ChatHistory.vue'), meta: { title: '问答历史' } },
       { path: 'feedback', name: 'Feedback', component: () => import('../views/Feedback.vue'), meta: { title: '反馈纠错' } },
       { path: 'comments', name: 'Comments', component: () => import('../views/Comments.vue'), meta: { title: '评论讨论' } },
       { path: 'notices', name: 'Notices', component: () => import('../views/Notices.vue'), meta: { title: '通知公告' } },
       { path: 'tickets', name: 'Tickets', component: () => import('../views/Tickets.vue'), meta: { title: '工单系统' } },
+      { path: 'todo', name: 'TodoCenter', component: () => import('../views/TodoCenter.vue'), meta: { title: '待办中心', roles: ['hr', 'admin'] } },
       { path: 'onboarding', name: 'Onboarding', component: () => import('../views/Onboarding.vue'), meta: { title: '入职引导' } },
       { path: 'reminders', name: 'Reminders', component: () => import('../views/Reminders.vue'), meta: { title: '到期提醒' } },
       { path: 'statistics', name: 'Statistics', component: () => import('../views/Statistics.vue'), meta: { title: '数据统计', roles: ['hr'] } },
@@ -50,7 +52,7 @@ const router = createRouter({
 })
 
 // admin 只能访问的页面白名单
-const adminAllowed = ['/documents', '/user-management', '/department-management', '/profile', '/notices', '/tickets', '/feedback', '/faqs', '/statistics']
+const adminAllowed = ['/documents', '/user-management', '/department-management', '/profile', '/notices', '/tickets', '/feedback', '/faqs', '/statistics', '/knowledge', '/todo']
 
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')

@@ -42,30 +42,18 @@
             <el-icon><ChatDotRound /></el-icon>
             <template #title>智能问答</template>
           </el-menu-item>
-          <el-menu-item index="/tickets">
+          <el-menu-item index="/todo">
             <el-icon><Tickets /></el-icon>
             <template #title>
               <div style="display: flex; align-items: center; width: 100%">
-                <span>工单管理</span>
+                <span>待办中心</span>
                 <el-badge v-if="pendingTickets > 0" :value="pendingTickets" :max="99" style="margin-left: auto; margin-top: -6px" />
               </div>
             </template>
           </el-menu-item>
-          <el-menu-item index="/documents">
+          <el-menu-item index="/knowledge">
             <el-icon><Folder /></el-icon>
-            <template #title>知识库管理</template>
-          </el-menu-item>
-          <el-menu-item index="/faqs">
-            <el-icon><QuestionFilled /></el-icon>
-            <template #title>标准答案库</template>
-          </el-menu-item>
-          <el-menu-item index="/feedback">
-            <el-icon><Comment /></el-icon>
-            <template #title>反馈处理</template>
-          </el-menu-item>
-          <el-menu-item index="/gaps">
-            <el-icon><Warning /></el-icon>
-            <template #title>知识缺口</template>
+            <template #title>知识管理</template>
           </el-menu-item>
           <el-menu-item index="/notices">
             <el-icon><Bell /></el-icon>
