@@ -76,6 +76,9 @@
               <el-tag v-else-if="msg.answer_type === 'clarification'" type="info" size="small" effect="plain">需要补充信息</el-tag>
               <el-tag v-else-if="msg.answer_type === 'ticket_form'" type="warning" size="small" effect="plain">工单申请</el-tag>
               <el-tag v-else-if="msg.answer_type === 'ticket_submitted'" type="success" size="small" effect="plain">工单已提交</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'notice_form'" type="primary" size="small" effect="plain">发布公告</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'notice_published'" type="success" size="small" effect="plain">公告已发布</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'no_permission'" type="danger" size="small" effect="plain">无权限</el-tag>
               <el-tag v-else-if="msg.answer_type === 'miss'" type="info" size="small" effect="plain">未找到明确依据</el-tag>
               <el-tag v-else size="small" effect="plain">{{ msg.answer_type }}</el-tag>
             </div>
@@ -155,6 +158,33 @@
         <el-button type="primary" @click="submitTicketForm" :loading="ticketSubmitting">提交</el-button>
       </template>
     </el-dialog>
+
+    <!-- 公告表单对话框 -->
+    <el-dialog v-model="noticeDialogVisible" title="发布公告" width="600px" :close-on-click-modal="false">
+      <el-form :model="noticeForm" label-width="80px">
+        <el-form-item label="标题">
+          <el-input v-model="noticeForm.title" placeholder="请输入公告标题" />
+        </el-form-item>
+        <el-form-item label="内容">
+          <el-input v-model="noticeForm.content" type="textarea" :rows="6" placeholder="请输入公告内容" />
+        </el-form-item>
+        <el-form-item label="类型">
+          <el-select v-model="noticeForm.notice_type" style="width: 100%">
+            <el-option label="一般" value="general" />
+            <el-option label="政策" value="policy" />
+            <el-option label="假期" value="holiday" />
+            <el-option label="提醒" value="reminder" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="置顶">
+          <el-switch v-model="noticeForm.is_pinned" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="noticeDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitNoticeForm" :loading="noticeSubmitting">发布</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -167,6 +197,7 @@ import { sendChat } from '../api/chat'
 import { createFeedback } from '../api/feedback'
 import { toggleFavorite } from '../api/chatHistory'
 import { createTicket } from '../api/tickets'
+import { createNotice } from '../api/notices'
 import { useUserStore } from '../stores/user'
 import { useChatStore } from '../stores/chat'
 
@@ -260,6 +291,65 @@ function openTicketDialog(type, title) {
   ticketForm.deadline = ''
   ticketForm.description = ''
   ticketDialogVisible.value = true
+}
+
+// ===== 公告引导 =====
+const noticeKeywords = ['发布公告', '发通知', '发布通知', '发公告', '通知公告']
+
+// 公告表单相关
+const noticeDialogVisible = ref(false)
+const noticeSubmitting = ref(false)
+const noticeForm = reactive({
+  title: '',
+  content: '',
+  notice_type: 'general',
+  is_pinned: 0
+})
+
+function isNoticeIntent(text) {
+  return noticeKeywords.some(kw => text.includes(kw))
+}
+
+function openNoticeDialog() {
+  noticeForm.title = ''
+  noticeForm.content = ''
+  noticeForm.notice_type = 'general'
+  noticeForm.is_pinned = 0
+  noticeDialogVisible.value = true
+}
+
+async function submitNoticeForm() {
+  if (!noticeForm.title.trim()) {
+    ElMessage.warning('请填写公告标题')
+    return
+  }
+  if (!noticeForm.content.trim()) {
+    ElMessage.warning('请填写公告内容')
+    return
+  }
+
+  noticeSubmitting.value = true
+  try {
+    await createNotice(noticeForm)
+    noticeDialogVisible.value = false
+
+    // 在聊天记录中添加发布成功的消息
+    chatStore.messages.push({
+      role: 'assistant',
+      content: `公告已发布成功！\n\n标题：${noticeForm.title}`,
+      answer_type: 'notice_published',
+      source_docs: [],
+      record_id: null,
+      feedback: null,
+      is_favorite: false,
+    })
+    scrollToBottom()
+    ElMessage.success('公告发布成功')
+  } catch (e) {
+    ElMessage.error('发布失败，请稍后重试')
+  } finally {
+    noticeSubmitting.value = false
+  }
 }
 
 async function submitTicketForm() {
@@ -409,6 +499,40 @@ async function sendMessage() {
 
     // 弹出工单表单对话框
     openTicketDialog(ticketType, ticketTitle)
+    return
+  }
+
+  // 前端拦截：公告引导 - 检查权限后弹出表格
+  if (isNoticeIntent(q)) {
+    // 检查权限：只有 HR 和管理员可以发布公告
+    if (!userStore.isHR && !userStore.isAdmin) {
+      chatStore.messages.push({
+        role: 'assistant',
+        content: '抱歉，您没有发布公告的权限。只有 HR 和管理员可以发布公告。',
+        answer_type: 'no_permission',
+        source_docs: [],
+        record_id: null,
+        feedback: null,
+        is_favorite: false,
+      })
+      scrollToBottom()
+      return
+    }
+
+    // 先添加一条提示消息
+    chatStore.messages.push({
+      role: 'assistant',
+      content: '好的，我来帮您发布公告，请填写以下信息：',
+      answer_type: 'notice_form',
+      source_docs: [],
+      record_id: null,
+      feedback: null,
+      is_favorite: false,
+    })
+    scrollToBottom()
+
+    // 弹出公告表单对话框
+    openNoticeDialog()
     return
   }
 
