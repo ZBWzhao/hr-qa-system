@@ -95,11 +95,38 @@ async function initFaqChart() {
   try {
     const res = await getFaqs({ page_size: 10 })
     const faqs = res.data?.items || []
+    // 截断问题文本，保留合理长度
+    const truncateText = (text, maxLen = 20) => {
+      if (!text) return ''
+      return text.length > maxLen ? text.substring(0, maxLen) + '...' : text
+    }
     chart.setOption({
-      tooltip: {},
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: function(params) {
+          const idx = params[0].dataIndex
+          const faq = faqs[faqs.length - 1 - idx]
+          return `${faq?.question || ''}<br/>浏览次数：${params[0].value}`
+        }
+      },
+      grid: { left: '30%', right: '10%' },
       xAxis: { type: 'value' },
-      yAxis: { type: 'category', data: faqs.map(f => f.question.substring(0, 10) + '...').reverse() },
-      series: [{ type: 'bar', data: faqs.map(f => f.view_count).reverse(), itemStyle: { color: '#059669' } }]
+      yAxis: {
+        type: 'category',
+        data: faqs.map(f => truncateText(f.question)).reverse(),
+        axisLabel: {
+          width: 150,
+          overflow: 'truncate',
+          ellipsis: '...'
+        }
+      },
+      series: [{
+        type: 'bar',
+        data: faqs.map(f => f.view_count).reverse(),
+        itemStyle: { color: '#059669' },
+        barWidth: '60%'
+      }]
     })
   } catch (e) {
     chart.setOption({
