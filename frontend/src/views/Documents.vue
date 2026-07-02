@@ -3,7 +3,7 @@
     <template #header>
       <div style="display: flex; justify-content: space-between; align-items: center">
         <span style="font-weight: 600; color: #111827">制度文档管理</span>
-        <el-button v-if="userStore.isHR" type="primary" @click="showDialog()">上传文档</el-button>
+        <el-button v-if="userStore.isHR || userStore.isAdmin" type="primary" @click="showDialog()">上传文档</el-button>
       </div>
     </template>
     <div style="display: flex; gap: 12px; margin-bottom: 16px">
@@ -20,7 +20,7 @@
         <el-option label="绩效" value="performance" />
         <el-option label="其他" value="other" />
       </el-select>
-      <el-select v-if="userStore.isHR" v-model="filters.status" placeholder="全部状态" clearable @change="fetchData">
+      <el-select v-if="userStore.isHR || userStore.isAdmin" v-model="filters.status" placeholder="全部状态" clearable @change="fetchData">
         <el-option label="草稿" value="draft" />
         <el-option label="已发布" value="published" />
         <el-option label="已归档" value="archived" />
@@ -43,11 +43,11 @@
       <el-table-column prop="created_at" label="创建时间" width="120">
         <template #default="{ row }">{{ row.created_at?.substring(0, 10) }}</template>
       </el-table-column>
-      <el-table-column label="操作" :width="userStore.isHR ? 300 : 80" fixed="right">
+      <el-table-column label="操作" :width="(userStore.isHR || userStore.isAdmin) ? 300 : 80" fixed="right">
         <template #default="{ row }">
           <div style="display: flex; flex-wrap: nowrap; gap: 4px">
             <el-button size="small" @click="viewDetail(row)">详情</el-button>
-            <template v-if="userStore.isHR">
+            <template v-if="userStore.isHR || userStore.isAdmin">
               <el-button size="small" type="primary" @click="showEdit(row)">编辑</el-button>
               <el-button v-if="row.status === 'draft'" size="small" type="success" @click="handlePublish(row)">发布</el-button>
               <el-button v-if="row.status === 'published'" size="small" type="warning" @click="handleArchive(row)">归档</el-button>
