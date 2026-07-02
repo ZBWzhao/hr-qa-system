@@ -37,6 +37,7 @@ import * as echarts from 'echarts'
 import { getRoiReport } from '../api/roi'
 import { getTicketStats } from '../api/tickets'
 import { getFaqs } from '../api/faqs'
+import { getCategoryStats } from '../api/chat'
 
 const trendChart = ref()
 const categoryChart = ref()
@@ -72,22 +73,46 @@ async function initTrendChart() {
   }
 }
 
-function initCategoryChart() {
+async function initCategoryChart() {
   const chart = echarts.init(categoryChart.value)
-  chart.setOption({
-    tooltip: { trigger: 'item' },
-    legend: { bottom: 0 },
-    series: [{
-      type: 'pie', radius: ['40%', '70%'],
-      data: [
-        { value: 35, name: '考勤' },
-        { value: 25, name: '休假' },
-        { value: 20, name: '薪酬' },
-        { value: 15, name: '绩效' },
-        { value: 5, name: '其他' }
-      ]
-    }]
-  })
+  try {
+    const res = await getCategoryStats()
+    const categories = res.data || []
+    chart.setOption({
+      tooltip: {
+        trigger: 'item',
+        formatter: '{b}: {c} ({d}%)'
+      },
+      legend: {
+        bottom: 0,
+        type: 'scroll'
+      },
+      series: [{
+        type: 'pie',
+        radius: ['40%', '70%'],
+        label: {
+          show: true,
+          formatter: '{b}: {c}'
+        },
+        data: categories.map(c => ({
+          value: c.value,
+          name: c.name
+        }))
+      }]
+    })
+  } catch (e) {
+    // 如果获取失败，显示默认数据
+    chart.setOption({
+      tooltip: { trigger: 'item' },
+      legend: { bottom: 0 },
+      series: [{
+        type: 'pie', radius: ['40%', '70%'],
+        data: [
+          { value: 0, name: '暂无数据' }
+        ]
+      }]
+    })
+  }
 }
 
 async function initFaqChart() {

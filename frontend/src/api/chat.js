@@ -20,6 +20,10 @@ export function getChatStats() {
   return request.get('/chat/stats')
 }
 
+export function getCategoryStats() {
+  return request.get('/chat/category-stats')
+}
+
 export function reindexDocuments() {
   return request.post('/documents/reindex')
 }

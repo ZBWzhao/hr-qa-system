@@ -386,3 +386,45 @@ def get_chat_stats(current_user: User = Depends(get_current_user)):
     from app.services.rag.vectorstore import get_collection_stats
     stats = get_collection_stats()
     return success(stats)
+
+
+@router.get("/category-stats")
+def get_category_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """获取咨询类别分布统计"""
+    from sqlalchemy import func
+    from app.models.qa import QARecord
+
+    # 统计各类别的问答数量
+    # 基于 answer_type 分类
+    stats = db.query(
+        QARecord.answer_type,
+        func.count(QARecord.id)
+    ).group_by(QARecord.answer_type).all()
+
+    # 转换为前端需要的格式
+    category_map = {
+        'faq': '标准答案',
+        'rule': '规则匹配',
+        'rag': '文档检索',
+        'miss': '未命中',
+        'clarification': '澄清追问',
+        'ticket_form': '工单申请',
+        'ticket_submitted': '工单已提交',
+        'notice_form': '公告发布',
+        'notice_confirm': '公告确认',
+        'no_permission': '无权限'
+    }
+
+    result = []
+    for answer_type, count in stats:
+        category = category_map.get(answer_type, '其他')
+        result.append({
+            'name': category,
+            'value': count,
+            'type': answer_type
+        })
+
+    # 按数量排序
+    result.sort(key=lambda x: x['value'], reverse=True)
+
+    return success(result)
