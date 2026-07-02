@@ -493,6 +493,7 @@ async function sendMessage() {
     }).then(res => {
       if (res.data?.conversation_id) {
         chatStore.currentConversationId = res.data.conversation_id
+        chatStore.fetchConversations()
       }
     }).catch(() => {})
     return
@@ -525,6 +526,7 @@ async function sendMessage() {
     }).then(res => {
       if (res.data?.conversation_id) {
         chatStore.currentConversationId = res.data.conversation_id
+        chatStore.fetchConversations()
       }
     }).catch(() => {})
 
@@ -557,6 +559,7 @@ async function sendMessage() {
       }).then(res => {
         if (res.data?.conversation_id) {
           chatStore.currentConversationId = res.data.conversation_id
+          chatStore.fetchConversations()
         }
       }).catch(() => {})
       return
@@ -593,6 +596,7 @@ async function sendMessage() {
       }).then(res => {
         if (res.data?.conversation_id) {
           chatStore.currentConversationId = res.data.conversation_id
+          chatStore.fetchConversations()
         }
       }).catch(() => {})
       openNoticeDialog()
@@ -620,6 +624,7 @@ async function sendMessage() {
     }).then(res => {
       if (res.data?.conversation_id) {
         chatStore.currentConversationId = res.data.conversation_id
+        chatStore.fetchConversations()
       }
     }).catch(() => {})
     return
@@ -654,6 +659,7 @@ async function sendMessage() {
       }).then(res => {
         if (res.data?.conversation_id) {
           chatStore.currentConversationId = res.data.conversation_id
+          chatStore.fetchConversations()
         }
       }).catch(() => {})
       openNoticeDialog()
@@ -687,6 +693,7 @@ async function sendMessage() {
       }).then(res => {
         if (res.data?.conversation_id) {
           chatStore.currentConversationId = res.data.conversation_id
+          chatStore.fetchConversations()
         }
       }).catch(() => {})
       openNoticeDialog()
