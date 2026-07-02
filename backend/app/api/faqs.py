@@ -85,18 +85,38 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
             if not content:
                 return error("关键词生成失败，请重试")
 
-            # 清理关键词
+            # 清理关键词 - 只保留逗号分隔的关键词部分
             keywords = content.strip()
+
+            # 如果内容包含冒号或换行，只取最后一行（通常是关键词）
+            if '\n' in keywords:
+                lines = [l.strip() for l in keywords.split('\n') if l.strip()]
+                # 找到最后一行看起来像关键词的行（包含逗号）
+                for line in reversed(lines):
+                    if ',' in line or '，' in line:
+                        keywords = line
+                        break
+                else:
+                    keywords = lines[-1] if lines else ""
+
             # 移除可能的前缀
             keywords = re.sub(r'^(关键词[：:]?\s*)', '', keywords)
             # 移除换行符
             keywords = keywords.replace('\n', ',')
-            # 移除多余的空格和标点
+            # 移除多余的空格
             keywords = re.sub(r'\s+', '', keywords)
+            # 移除末尾的标点
             keywords = keywords.rstrip('。，,. ')
 
-            if not keywords:
+            # 验证关键词格式（应该包含逗号分隔）
+            if not keywords or len(keywords) < 2:
                 return error("关键词生成失败，请重试")
+
+            # 如果没有逗号，可能是单个词或句子，尝试提取
+            if ',' not in keywords and '，' not in keywords:
+                # 如果内容太长，可能是句子而不是关键词
+                if len(keywords) > 20:
+                    return error("关键词生成失败，请重试")
 
             return success({"keywords": keywords})
 
