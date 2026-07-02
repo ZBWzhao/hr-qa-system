@@ -1,14 +1,81 @@
 from typing import Optional
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_roles
 from app.core.response import success, error, paginated
+from app.core.config import settings
 from app.schemas.qa import FAQCreate, FAQUpdate, FAQOut
 from app.models.qa import FAQ
 from app.models.user import User
 
 router = APIRouter()
+
+
+class KeywordRequest(BaseModel):
+    question: str = ""
+    answer: str = ""
+
+
+@router.post("/generate-keywords")
+def generate_keywords(data: KeywordRequest, current_user: User = Depends(require_roles("hr"))):
+    """AI生成关键词"""
+    import os
+    import json
+    import subprocess
+    import tempfile
+
+    question = data.question
+    answer = data.answer
+
+    if not question and not answer:
+        return error("请输入问题或回答")
+
+    prompt = f"请提取以下内容的5-8个关键词，只输出关键词，用逗号分隔，不要输出其他内容：\n问题：{question}\n回答：{answer}"
+
+    try:
+        req_data = {
+            "model": settings.MIMO_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.3,
+            "max_tokens": 2000
+        }
+
+        tmp_dir = tempfile.gettempdir()
+        req_file = os.path.join(tmp_dir, "mimo_kw_req.json")
+        resp_file = os.path.join(tmp_dir, "mimo_kw_resp.json")
+
+        with open(req_file, "w", encoding="utf-8") as f:
+            json.dump(req_data, f, ensure_ascii=False)
+
+        subprocess.run([
+            "curl", "-s", "-X", "POST",
+            f"{settings.MIMO_BASE_URL}/chat/completions",
+            "-H", f"Authorization: Bearer {settings.MIMO_API_KEY}",
+            "-H", "Content-Type: application/json",
+            "-d", f"@{req_file}",
+            "-o", resp_file
+        ], timeout=60)
+
+        with open(resp_file, "rb") as f:
+            raw = f.read()
+
+        import re
+        match = re.search(rb'"content":"([^"]*)"', raw)
+        if match:
+            keywords = match.group(1).decode("utf-8").strip()
+        else:
+            keywords = ""
+
+        if not keywords:
+            return error("关键词生成失败，请重试")
+
+        return success({"keywords": keywords})
+    except subprocess.TimeoutExpired:
+        return error("AI服务响应超时")
+    except Exception as e:
+        return error(f"AI服务异常: {str(e)}")
 
 
 @router.get("")

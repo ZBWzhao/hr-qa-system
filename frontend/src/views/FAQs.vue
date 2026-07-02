@@ -58,7 +58,15 @@
             <el-option label="入职/其他" value="other" />
           </el-select>
         </el-form-item>
-        <el-form-item label="关键词"><el-input v-model="form.keywords" placeholder="用逗号分隔" /></el-form-item>
+        <el-form-item label="关键词">
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-input v-model="form.keywords" placeholder="用逗号分隔" style="flex: 1" />
+            <el-button type="primary" :loading="generating" @click="handleGenerateKeywords">
+              <el-icon style="margin-right: 4px"><MagicStick /></el-icon>
+              AI识别
+            </el-button>
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -83,8 +91,8 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
-import { getFaqs, getAllFaqs, getFaq, createFaq, updateFaq, deleteFaq } from '../api/faqs'
+import { Search, MagicStick } from '@element-plus/icons-vue'
+import { getFaqs, getAllFaqs, getFaq, createFaq, updateFaq, deleteFaq, generateKeywords } from '../api/faqs'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
@@ -99,6 +107,7 @@ const editId = ref(null)
 const form = reactive({ question: '', answer: '', category: 'other', keywords: '' })
 const detailVisible = ref(false)
 const detail = ref({})
+const generating = ref(false)
 
 function categoryLabel(c) {
   return { attendance: '考勤', salary: '薪酬', benefit: '福利', leave: '休假', performance: '绩效', other: '入职/其他' }[c] || c || '—'
@@ -152,6 +161,25 @@ async function handleDelete(row) {
   await deleteFaq(row.id)
   ElMessage.success('删除成功')
   fetchData()
+}
+
+async function handleGenerateKeywords() {
+  if (!form.question && !form.answer) {
+    ElMessage.warning('请先输入问题或回答')
+    return
+  }
+  generating.value = true
+  try {
+    const res = await generateKeywords({ question: form.question, answer: form.answer })
+    if (res.data?.keywords) {
+      form.keywords = res.data.keywords
+      ElMessage.success('关键词生成成功')
+    }
+  } catch (e) {
+    ElMessage.error('关键词生成失败')
+  } finally {
+    generating.value = false
+  }
 }
 
 onMounted(() => fetchData())
