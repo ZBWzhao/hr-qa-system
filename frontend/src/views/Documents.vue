@@ -364,10 +364,13 @@ onMounted(() => {
 .search-snippet {
   font-size: 12px;
   color: #6B7280;
-  margin-top: 4px;
-  line-height: 1.5;
-  max-height: 40px;
+  margin-top: 6px;
+  line-height: 1.6;
+  max-height: 60px;
   overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 .search-snippet :deep(em) {
   color: #f5222d;
