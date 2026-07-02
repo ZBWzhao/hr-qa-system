@@ -76,6 +76,7 @@
               <el-tag v-else-if="msg.answer_type === 'clarification'" type="info" size="small" effect="plain">需要补充信息</el-tag>
               <el-tag v-else-if="msg.answer_type === 'ticket_form'" type="warning" size="small" effect="plain">工单申请</el-tag>
               <el-tag v-else-if="msg.answer_type === 'ticket_submitted'" type="success" size="small" effect="plain">工单已提交</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'notice_confirm'" type="info" size="small" effect="plain">待确认</el-tag>
               <el-tag v-else-if="msg.answer_type === 'notice_form'" type="primary" size="small" effect="plain">发布公告</el-tag>
               <el-tag v-else-if="msg.answer_type === 'notice_published'" type="success" size="small" effect="plain">公告已发布</el-tag>
               <el-tag v-else-if="msg.answer_type === 'no_permission'" type="danger" size="small" effect="plain">无权限</el-tag>
@@ -294,7 +295,11 @@ function openTicketDialog(type, title) {
 }
 
 // ===== 公告引导 =====
-const noticeKeywords = ['发布公告', '发通知', '发布通知', '发公告', '通知公告']
+const noticeKeywords = [
+  '发布公告', '发通知', '发布通知', '发公告', '通知公告',
+  '通知大家', '通知全体员工', '发一个通知', '发一个公告',
+  '写通知', '写公告', '公告', '通知'
+]
 
 // 公告表单相关
 const noticeDialogVisible = ref(false)
@@ -307,6 +312,7 @@ const noticeForm = reactive({
 })
 
 function isNoticeIntent(text) {
+  // 检查是否包含公告相关关键词
   return noticeKeywords.some(kw => text.includes(kw))
 }
 
@@ -502,7 +508,7 @@ async function sendMessage() {
     return
   }
 
-  // 前端拦截：公告引导 - 检查权限后弹出表格
+  // 前端拦截：公告引导 - 检查权限后询问确认
   if (isNoticeIntent(q)) {
     // 检查权限：只有 HR 和管理员可以发布公告
     if (!userStore.isHR && !userStore.isAdmin) {
@@ -519,20 +525,64 @@ async function sendMessage() {
       return
     }
 
-    // 先添加一条提示消息
+    // 检查是否是确认操作（用户回复"是"、"确认"、"好的"等）
+    const confirmWords = ['是', '确认', '好的', '可以', '对', '嗯', '行', '发吧', '发布吧']
+    const isConfirm = confirmWords.some(w => q.trim() === w || q.trim().startsWith(w))
+
+    // 检查上一条消息是否是询问确认
+    const lastMsg = chatStore.messages[chatStore.messages.length - 2]
+    const isAfterConfirm = lastMsg?.answer_type === 'notice_confirm'
+
+    if (isConfirm && isAfterConfirm) {
+      // 用户确认后，弹出公告表单
+      chatStore.messages.push({
+        role: 'assistant',
+        content: '好的，请填写公告信息：',
+        answer_type: 'notice_form',
+        source_docs: [],
+        record_id: null,
+        feedback: null,
+        is_favorite: false,
+      })
+      scrollToBottom()
+      openNoticeDialog()
+      return
+    }
+
+    // 如果用户直接说了具体内容（比如"通知大家明天放假"），直接弹出表单并预填
+    const hasContent = q.length > 10 && !['发布公告', '发通知', '发布通知', '发公告', '通知公告', '通知大家'].includes(q.trim())
+
+    if (hasContent) {
+      // 尝试从用户输入中提取标题
+      const title = q.replace(/^(我想|我要|我需要|请|帮忙|帮我|)/, '').trim()
+      noticeForm.title = title.length < 50 ? title : ''
+      noticeForm.content = ''
+
+      chatStore.messages.push({
+        role: 'assistant',
+        content: '好的，我来帮您发布公告，请确认或补充以下信息：',
+        answer_type: 'notice_form',
+        source_docs: [],
+        record_id: null,
+        feedback: null,
+        is_favorite: false,
+      })
+      scrollToBottom()
+      openNoticeDialog()
+      return
+    }
+
+    // 否则询问用户确认
     chatStore.messages.push({
       role: 'assistant',
-      content: '好的，我来帮您发布公告，请填写以下信息：',
-      answer_type: 'notice_form',
+      content: '您想要发布公告吗？请回复"确认"继续，或者直接告诉我公告的标题和内容。',
+      answer_type: 'notice_confirm',
       source_docs: [],
       record_id: null,
       feedback: null,
       is_favorite: false,
     })
     scrollToBottom()
-
-    // 弹出公告表单对话框
-    openNoticeDialog()
     return
   }
 

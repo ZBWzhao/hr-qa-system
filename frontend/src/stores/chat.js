@@ -66,8 +66,16 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
   }
 
+  // 清除所有聊天数据（用于退出登录时）
+  function clearAll() {
+    groups.value = []
+    currentConversationId.value = null
+    messages.value = []
+    loading.value = false
+  }
+
   return {
     groups, currentConversationId, messages, loading,
-    fetchConversations, loadConversation, removeConversation, clearCurrentConversation,
+    fetchConversations, loadConversation, removeConversation, clearCurrentConversation, clearAll,
   }
 })

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getUserInfo } from '../api/auth'
+import { useChatStore } from './chat'
 
 export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('token') || '')
@@ -32,10 +33,22 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function logout() {
+    // 清除聊天记录
+    const chatStore = useChatStore()
+    chatStore.clearAll()
+
+    // 清除用户信息
     token.value = ''
     userInfo.value = {}
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+
+    // 清除笔记缓存
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('chat-notes-')) {
+        localStorage.removeItem(key)
+      }
+    })
   }
 
   return { token, userInfo, isLoggedIn, role, isHR, isAdmin, setToken, setUser, fetchUserInfo, logout }
