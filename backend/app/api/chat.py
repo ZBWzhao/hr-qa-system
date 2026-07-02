@@ -48,6 +48,11 @@ def match_faq(db: Session, question: str):
     keywords = extract_keywords(question)
     faqs = db.query(FAQ).filter(FAQ.status == 1).all()
 
+    # 通用词列表，匹配时权重降低
+    common_words = {'如何', '怎么', '什么', '为什么', '请', '帮我', '告诉', '一下',
+                    '一些', '这个', '那个', '可以', '能否', '是否', '有没有', '想',
+                    '知道', '了解', '咨询', '询问', '问', '答', '回答', '问题'}
+
     best_match = None
     best_score = 0
 
@@ -56,23 +61,42 @@ def match_faq(db: Session, question: str):
     for faq in faqs:
         score = 0
 
-        # 完全匹配问题
+        # 完全匹配问题（高权重）
         if faq.question and (faq.question.lower() in q_lower or q_lower in faq.question.lower()):
             score += 10
 
         # 关键词匹配
         for kw in keywords:
-            if kw and faq.question and kw in faq.question:
-                score += 3
-            if kw and faq.keywords and kw in faq.keywords:
-                score += 2
+            if not kw:
+                continue
+
+            # 通用词权重降低
+            is_common = kw in common_words
+            weight = 1 if is_common else 3
+
+            if faq.question and kw in faq.question:
+                score += weight
+            if faq.keywords and kw in faq.keywords:
+                score += weight
 
         if score > best_score:
             best_score = score
             best_match = faq
 
     # 阈值设为3，避免误匹配
+    # 但如果只匹配到通用词，需要更高阈值
     if best_match and best_score >= 3:
+        # 检查是否只匹配到了通用词
+        matched_keywords = []
+        for kw in keywords:
+            if kw and ((faq.question and kw in faq.question) or (faq.keywords and kw in faq.keywords)):
+                matched_keywords.append(kw)
+
+        # 如果所有匹配到的关键词都是通用词，需要更高分数
+        all_common = all(kw in common_words for kw in matched_keywords if kw)
+        if all_common and best_score < 6:
+            return None
+
         best_match.view_count += 1
         return best_match
     return None

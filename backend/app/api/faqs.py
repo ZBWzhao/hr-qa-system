@@ -32,7 +32,15 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
     if not question and not answer:
         return error("请输入问题或回答")
 
-    prompt = f"请提取以下内容的5-8个关键词，只输出关键词，用逗号分隔，不要输出其他内容：\n问题：{question}\n回答：{answer}"
+    prompt = f"""请提取以下内容的5-8个关键词，只输出关键词，用逗号分隔，不要输出其他内容。
+
+注意：
+1. 只提取有实际意义的名词和专业术语
+2. 不要提取通用词汇，如：如何、怎么、什么、为什么、请、帮我、告诉、一下、一些、这个、那个
+3. 优先提取与业务、制度、流程相关的专业词汇
+
+问题：{question}
+回答：{answer}"""
 
     try:
         req_data = {
