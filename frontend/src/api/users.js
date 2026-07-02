@@ -23,3 +23,11 @@ export function updateUserStatus(userId, action) {
 export function resetPassword(userId) {
   return request.post(`/users/${userId}/reset-password`)
 }
+
+export function downloadUserTemplate() {
+  return request.get('/users/template', { responseType: 'blob' })
+}
+
+export function parseUserFile(formData) {
+  return request.post('/users/parse-file', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+}

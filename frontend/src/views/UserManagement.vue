@@ -10,7 +10,7 @@
           </el-button>
           <el-button type="success" @click="showAddBatch">
             <el-icon style="margin-right: 4px"><Upload /></el-icon>
-            批量添加
+            批量导入
           </el-button>
         </div>
       </div>
@@ -104,45 +104,99 @@
       </template>
     </el-dialog>
 
-    <!-- 批量添加用户对话框 -->
-    <el-dialog v-model="addBatchVisible" title="批量添加用户" width="600px">
-      <div style="margin-bottom: 16px">
-        <p style="color: #6B7280; font-size: 14px; margin-bottom: 12px">
-          请按照以下格式填写用户信息，每行一个用户，字段用逗号分隔：
-        </p>
-        <div style="background: #f9fafb; padding: 12px; border-radius: 8px; font-size: 13px; color: #374151; font-family: monospace">
-          格式：工号,姓名,邮箱,角色
-          <br>
-          示例：
-          <br>
-          emp002,张三,zhangsan@company.com,employee
-          <br>
-          hr002,李四,lisi@company.com,hr
+    <!-- 批量导入对话框 - 步骤1：上传文件 -->
+    <el-dialog v-model="addBatchVisible" title="批量导入用户" width="700px" :close-on-click-modal="false">
+      <el-steps :active="batchStep" finish-status="success" style="margin-bottom: 24px">
+        <el-step title="上传文件" />
+        <el-step title="预览确认" />
+        <el-step title="导入结果" />
+      </el-steps>
+
+      <!-- 步骤1：上传文件 -->
+      <div v-if="batchStep === 0">
+        <div style="margin-bottom: 16px">
+          <el-button type="primary" plain @click="downloadTemplate">
+            <el-icon style="margin-right: 4px"><Download /></el-icon>
+            下载模板文件
+          </el-button>
+          <span style="margin-left: 12px; color: #9CA3AF; font-size: 13px">请使用模板文件填写用户信息后上传</span>
         </div>
-        <p style="color: #9CA3AF; font-size: 12px; margin-top: 8px">
-          角色可选：employee（普通员工）、hr（HR人员）、admin（管理员）
-          <br>
-          初始密码默认为 123456
-        </p>
+
+        <el-upload
+          ref="uploadRef"
+          :auto-upload="false"
+          :limit="1"
+          :on-change="handleFileChange"
+          :on-remove="handleFileRemove"
+          accept=".csv,.xlsx,.xls"
+          drag
+        >
+          <el-icon style="font-size: 48px; color: #C0C4CC; margin-bottom: 12px"><Upload /></el-icon>
+          <div style="color: #606266">将文件拖到此处，或<em style="color: #409EFF">点击上传</em></div>
+          <template #tip>
+            <div style="color: #9CA3AF; font-size: 12px; margin-top: 8px">支持 .csv、.xlsx、.xls 格式文件</div>
+          </template>
+        </el-upload>
       </div>
-      <el-input
-        v-model="batchText"
-        type="textarea"
-        :rows="10"
-        placeholder="请粘贴或输入用户数据，每行一个用户..."
-      />
-      <div v-if="batchResult" style="margin-top: 12px">
-        <el-divider />
-        <h4 style="margin-bottom: 8px">导入结果</h4>
-        <p style="color: #059669">成功：{{ batchResult.success }} 条</p>
-        <p v-if="batchResult.failed > 0" style="color: #DC2626">失败：{{ batchResult.failed }} 条</p>
-        <div v-if="batchResult.errors?.length" style="margin-top: 8px; max-height: 150px; overflow-y: auto">
-          <p v-for="(err, i) in batchResult.errors" :key="i" style="color: #DC2626; font-size: 13px">{{ err }}</p>
+
+      <!-- 步骤2：预览确认 -->
+      <div v-if="batchStep === 1">
+        <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center">
+          <div>
+            <span style="color: #374151; font-weight: 500">预览用户列表</span>
+            <span style="margin-left: 8px; color: #9CA3AF; font-size: 13px">已选择 {{ selectedUsers.length }} / {{ previewUsers.length }} 个用户</span>
+          </div>
+          <div>
+            <el-button size="small" @click="selectAllUsers">全部选择</el-button>
+            <el-button size="small" @click="deselectAllUsers">全部取消</el-button>
+          </div>
         </div>
+
+        <el-table :data="previewUsers" stripe max-height="400" @selection-change="handleSelectionChange">
+          <el-table-column type="selection" width="50" />
+          <el-table-column prop="username" label="工号" width="100" />
+          <el-table-column prop="real_name" label="姓名" width="100" />
+          <el-table-column prop="email" label="邮箱" min-width="180" />
+          <el-table-column prop="role" label="角色" width="100">
+            <template #default="{ row }"><el-tag :type="roleType(row.role)" size="small">{{ roleLabel(row.role) }}</el-tag></template>
+          </el-table-column>
+          <el-table-column prop="status" label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag v-if="row.valid" type="success" size="small">有效</el-tag>
+              <el-tooltip v-else :content="row.error" placement="top">
+                <el-tag type="danger" size="small">无效</el-tag>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
+
+      <!-- 步骤3：导入结果 -->
+      <div v-if="batchStep === 2">
+        <el-result
+          v-if="batchResult"
+          :icon="batchResult.failed > 0 ? 'warning' : 'success'"
+          :title="`导入完成`"
+          :sub-title="`成功 ${batchResult.success} 条，失败 ${batchResult.failed} 条`"
+        >
+          <template #extra>
+            <div v-if="batchResult.errors?.length" style="text-align: left; max-height: 200px; overflow-y: auto; margin-bottom: 16px">
+              <p v-for="(err, i) in batchResult.errors" :key="i" style="color: #DC2626; font-size: 13px; margin: 4px 0">{{ err }}</p>
+            </div>
+            <el-button type="primary" @click="addBatchVisible = false">完成</el-button>
+          </template>
+        </el-result>
+      </div>
+
       <template #footer>
-        <el-button @click="addBatchVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitAddBatch" :loading="addBatchLoading">导入</el-button>
+        <el-button v-if="batchStep < 2" @click="addBatchVisible = false">取消</el-button>
+        <el-button v-if="batchStep === 0" type="primary" @click="parseFile" :loading="parsingFile" :disabled="!selectedFile">
+          下一步
+        </el-button>
+        <el-button v-if="batchStep === 1" @click="batchStep = 0">上一步</el-button>
+        <el-button v-if="batchStep === 1" type="primary" @click="submitBatchImport" :loading="batchImportLoading" :disabled="selectedUsers.length === 0">
+          导入 {{ selectedUsers.length }} 个用户
+        </el-button>
       </template>
     </el-dialog>
   </el-card>
@@ -151,8 +205,8 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Upload } from '@element-plus/icons-vue'
-import { getUsers, updateUser, updateUserStatus, resetPassword, createUser, batchCreateUsers } from '../api/users'
+import { Plus, Upload, Download } from '@element-plus/icons-vue'
+import { getUsers, updateUser, updateUserStatus, resetPassword, createUser, batchCreateUsers, downloadUserTemplate, parseUserFile } from '../api/users'
 
 const loading = ref(false)
 const users = ref([])
@@ -184,11 +238,16 @@ const addSingleRules = {
   role: [{ required: true, message: '请选择角色', trigger: 'change' }]
 }
 
-// 批量添加
+// 批量导入
 const addBatchVisible = ref(false)
-const addBatchLoading = ref(false)
-const batchText = ref('')
+const batchStep = ref(0)
+const selectedFile = ref(null)
+const parsingFile = ref(false)
+const previewUsers = ref([])
+const selectedUsers = ref([])
+const batchImportLoading = ref(false)
 const batchResult = ref(null)
+const uploadRef = ref(null)
 
 function roleType(r) { return { employee: '', hr: 'success', admin: 'danger' }[r] || '' }
 function roleLabel(r) { return { employee: '普通员工', hr: 'HR人员', admin: '管理员' }[r] || r }
@@ -265,56 +324,89 @@ async function submitAddSingle() {
   }
 }
 
-// 批量添加用户
+// 批量导入用户
 function showAddBatch() {
-  batchText.value = ''
+  batchStep.value = 0
+  selectedFile.value = null
+  previewUsers.value = []
+  selectedUsers.value = []
   batchResult.value = null
   addBatchVisible.value = true
+  // 清空上传组件
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles()
+  }
 }
 
-async function submitAddBatch() {
-  if (!batchText.value.trim()) {
-    ElMessage.warning('请输入用户数据')
+function downloadTemplate() {
+  window.open('/api/v1/users/template', '_blank')
+}
+
+function handleFileChange(file) {
+  selectedFile.value = file.raw
+}
+
+function handleFileRemove() {
+  selectedFile.value = null
+}
+
+async function parseFile() {
+  if (!selectedFile.value) {
+    ElMessage.warning('请先选择文件')
     return
   }
 
-  // 解析文本
-  const lines = batchText.value.trim().split('\n').filter(line => line.trim())
-  const users = []
+  parsingFile.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', selectedFile.value)
+    const res = await parseUserFile(formData)
+    previewUsers.value = res.data?.users || []
+    // 默认全选有效用户
+    selectedUsers.value = previewUsers.value.filter(u => u.valid)
+    batchStep.value = 1
+  } catch (e) {
+    ElMessage.error(e.response?.data?.message || '文件解析失败')
+  } finally {
+    parsingFile.value = false
+  }
+}
 
-  for (let i = 0; i < lines.length; i++) {
-    const parts = lines[i].split(',').map(s => s.trim())
-    if (parts.length < 3) {
-      ElMessage.error(`第 ${i + 1} 行格式错误，至少需要工号、姓名、邮箱`)
-      return
-    }
+function handleSelectionChange(selection) {
+  selectedUsers.value = selection
+}
 
-    const [username, real_name, email, role = 'employee'] = parts
-    const validRoles = ['employee', 'hr', 'admin']
-    if (!validRoles.includes(role)) {
-      ElMessage.error(`第 ${i + 1} 行角色错误，可选：employee、hr、admin`)
-      return
-    }
+function selectAllUsers() {
+  selectedUsers.value = previewUsers.value.filter(u => u.valid)
+}
 
-    users.push({
-      username,
-      real_name,
-      email,
-      role,
-      password: '123456'
-    })
+function deselectAllUsers() {
+  selectedUsers.value = []
+}
+
+async function submitBatchImport() {
+  if (selectedUsers.value.length === 0) {
+    ElMessage.warning('请至少选择一个用户')
+    return
   }
 
-  addBatchLoading.value = true
+  batchImportLoading.value = true
   try {
-    const res = await batchCreateUsers({ users })
+    const usersToImport = selectedUsers.value.map(u => ({
+      username: u.username,
+      real_name: u.real_name,
+      email: u.email,
+      role: u.role,
+      password: '123456'
+    }))
+    const res = await batchCreateUsers({ users: usersToImport })
     batchResult.value = res.data
-    ElMessage.success(`导入完成：成功 ${res.data.success} 条`)
+    batchStep.value = 2
     fetchData()
   } catch (e) {
     ElMessage.error(e.response?.data?.message || '导入失败')
   } finally {
-    addBatchLoading.value = false
+    batchImportLoading.value = false
   }
 }
 
