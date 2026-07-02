@@ -194,7 +194,7 @@ import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Promotion, ChatDotRound, Star, Select, CloseBold, Plus, Delete, Document, Tickets } from '@element-plus/icons-vue'
-import { sendChat } from '../api/chat'
+import { sendChat, saveChatRecord } from '../api/chat'
 import { createFeedback } from '../api/feedback'
 import { toggleFavorite } from '../api/chatHistory'
 import { createTicket } from '../api/tickets'
@@ -473,9 +473,10 @@ async function sendMessage() {
 
   // 前端拦截：澄清追问
   if (needsClarification(q)) {
+    const answer = '我需要先确认你的工龄或入职日期，才能准确计算年假天数。\n请补充以下任意一项：\n1. 入职日期\n2. 累计工作年限'
     chatStore.messages.push({
       role: 'assistant',
-      content: '我需要先确认你的工龄或入职日期，才能准确计算年假天数。\n请补充以下任意一项：\n1. 入职日期\n2. 累计工作年限',
+      content: answer,
       answer_type: 'clarification',
       source_docs: [],
       record_id: null,
@@ -483,6 +484,17 @@ async function sendMessage() {
       is_favorite: false,
     })
     scrollToBottom()
+    // 保存到后端
+    saveChatRecord({
+      question: q,
+      answer: answer,
+      answer_type: 'clarification',
+      conversation_id: chatStore.currentConversationId
+    }).then(res => {
+      if (res.data?.conversation_id) {
+        chatStore.currentConversationId = res.data.conversation_id
+      }
+    }).catch(() => {})
     return
   }
 
@@ -492,9 +504,10 @@ async function sendMessage() {
     const ticketTitle = q.replace(/^(我想|我要|我需要|我|请)/, '').trim() || '人工请求'
 
     // 先添加一条提示消息
+    const answer = `好的，我来帮您提交"${ticketTitle}"请求，请填写以下信息：`
     chatStore.messages.push({
       role: 'assistant',
-      content: `好的，我来帮您提交"${ticketTitle}"请求，请填写以下信息：`,
+      content: answer,
       answer_type: 'ticket_form',
       source_docs: [],
       record_id: null,
@@ -502,6 +515,18 @@ async function sendMessage() {
       is_favorite: false,
     })
     scrollToBottom()
+
+    // 保存到后端
+    saveChatRecord({
+      question: q,
+      answer: answer,
+      answer_type: 'ticket_form',
+      conversation_id: chatStore.currentConversationId
+    }).then(res => {
+      if (res.data?.conversation_id) {
+        chatStore.currentConversationId = res.data.conversation_id
+      }
+    }).catch(() => {})
 
     // 弹出工单表单对话框
     openTicketDialog(ticketType, ticketTitle)
@@ -512,9 +537,10 @@ async function sendMessage() {
   if (isNoticeIntent(q)) {
     // 检查权限：只有 HR 和管理员可以发布公告
     if (!userStore.isHR && !userStore.isAdmin) {
+      const answer = '抱歉，您没有发布公告的权限。只有 HR 和管理员可以发布公告。'
       chatStore.messages.push({
         role: 'assistant',
-        content: '抱歉，您没有发布公告的权限。只有 HR 和管理员可以发布公告。',
+        content: answer,
         answer_type: 'no_permission',
         source_docs: [],
         record_id: null,
@@ -522,6 +548,17 @@ async function sendMessage() {
         is_favorite: false,
       })
       scrollToBottom()
+      // 保存到后端
+      saveChatRecord({
+        question: q,
+        answer: answer,
+        answer_type: 'no_permission',
+        conversation_id: chatStore.currentConversationId
+      }).then(res => {
+        if (res.data?.conversation_id) {
+          chatStore.currentConversationId = res.data.conversation_id
+        }
+      }).catch(() => {})
       return
     }
 
@@ -536,9 +573,10 @@ async function sendMessage() {
       noticeForm.title = title
       noticeForm.content = q.includes('：') || q.includes(':') ? q.split(/[:：]/).slice(1).join(':').trim() : ''
 
+      const answer = '好的，我来帮您发布公告，请确认或补充以下信息：'
       chatStore.messages.push({
         role: 'assistant',
-        content: '好的，我来帮您发布公告，请确认或补充以下信息：',
+        content: answer,
         answer_type: 'notice_form',
         source_docs: [],
         record_id: null,
@@ -546,14 +584,26 @@ async function sendMessage() {
         is_favorite: false,
       })
       scrollToBottom()
+      // 保存到后端
+      saveChatRecord({
+        question: q,
+        answer: answer,
+        answer_type: 'notice_form',
+        conversation_id: chatStore.currentConversationId
+      }).then(res => {
+        if (res.data?.conversation_id) {
+          chatStore.currentConversationId = res.data.conversation_id
+        }
+      }).catch(() => {})
       openNoticeDialog()
       return
     }
 
     // 否则询问用户确认
+    const answer = '您想要发布公告吗？\n\n请回复"确认"继续，或者直接告诉我公告内容，例如："通知大家明天放假一天"'
     chatStore.messages.push({
       role: 'assistant',
-      content: '您想要发布公告吗？\n\n请回复"确认"继续，或者直接告诉我公告内容，例如："通知大家明天放假一天"',
+      content: answer,
       answer_type: 'notice_confirm',
       source_docs: [],
       record_id: null,
@@ -561,6 +611,17 @@ async function sendMessage() {
       is_favorite: false,
     })
     scrollToBottom()
+    // 保存到后端
+    saveChatRecord({
+      question: q,
+      answer: answer,
+      answer_type: 'notice_confirm',
+      conversation_id: chatStore.currentConversationId
+    }).then(res => {
+      if (res.data?.conversation_id) {
+        chatStore.currentConversationId = res.data.conversation_id
+      }
+    }).catch(() => {})
     return
   }
 
@@ -573,9 +634,10 @@ async function sendMessage() {
 
     if (isConfirm) {
       // 用户确认后，弹出公告表单
+      const answer = '好的，请填写公告信息：'
       chatStore.messages.push({
         role: 'assistant',
-        content: '好的，请填写公告信息：',
+        content: answer,
         answer_type: 'notice_form',
         source_docs: [],
         record_id: null,
@@ -583,6 +645,17 @@ async function sendMessage() {
         is_favorite: false,
       })
       scrollToBottom()
+      // 保存到后端
+      saveChatRecord({
+        question: q,
+        answer: answer,
+        answer_type: 'notice_form',
+        conversation_id: chatStore.currentConversationId
+      }).then(res => {
+        if (res.data?.conversation_id) {
+          chatStore.currentConversationId = res.data.conversation_id
+        }
+      }).catch(() => {})
       openNoticeDialog()
       return
     }
@@ -594,9 +667,10 @@ async function sendMessage() {
       noticeForm.title = title
       noticeForm.content = ''
 
+      const answer = '好的，我来帮您发布公告，请确认或补充以下信息：'
       chatStore.messages.push({
         role: 'assistant',
-        content: '好的，我来帮您发布公告，请确认或补充以下信息：',
+        content: answer,
         answer_type: 'notice_form',
         source_docs: [],
         record_id: null,
@@ -604,6 +678,17 @@ async function sendMessage() {
         is_favorite: false,
       })
       scrollToBottom()
+      // 保存到后端
+      saveChatRecord({
+        question: q,
+        answer: answer,
+        answer_type: 'notice_form',
+        conversation_id: chatStore.currentConversationId
+      }).then(res => {
+        if (res.data?.conversation_id) {
+          chatStore.currentConversationId = res.data.conversation_id
+        }
+      }).catch(() => {})
       openNoticeDialog()
       return
     }

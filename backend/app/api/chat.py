@@ -275,6 +275,39 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     })
 
 
+@router.post("/save-record")
+def save_chat_record(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """保存前端拦截的对话记录"""
+    question = data.get("question", "").strip()
+    answer = data.get("answer", "").strip()
+    answer_type = data.get("answer_type", "system")
+    conversation_id = data.get("conversation_id")
+
+    if not question or not answer:
+        return error("问题和回答不能为空")
+
+    # 如果没有 conversation_id，创建一个新的
+    if not conversation_id:
+        conversation_id = str(uuid.uuid4())[:16]
+
+    record = QARecord(
+        user_id=current_user.id,
+        question=question,
+        answer=answer,
+        answer_type=answer_type,
+        source_docs=json.dumps([]),
+        conversation_id=conversation_id
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return success({
+        "record_id": record.id,
+        "conversation_id": conversation_id
+    })
+
+
 @router.post("/voice")
 def voice_chat(current_user: User = Depends(get_current_user)):
     mock_text = "语音识别结果：请问公司的年假政策是什么？"

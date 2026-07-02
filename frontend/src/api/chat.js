@@ -4,6 +4,10 @@ export function sendChat(data) {
   return request.post('/chat', data)
 }
 
+export function saveChatRecord(data) {
+  return request.post('/chat/save-record', data)
+}
+
 export function voiceChat() {
   return request.post('/chat/voice')
 }
