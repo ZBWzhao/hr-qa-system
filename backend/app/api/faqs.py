@@ -25,29 +25,24 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
     import json
     import subprocess
     import tempfile
+    import re
 
-    question = data.question
-    answer = data.answer
+    question = data.question.strip()
+    answer = data.answer.strip()
 
     if not question and not answer:
         return error("请输入问题或回答")
 
-    prompt = f"""请提取以下内容的5-8个关键词，只输出关键词，用逗号分隔，不要输出其他内容。
-
-注意：
-1. 只提取有实际意义的名词和专业术语
-2. 不要提取通用词汇，如：如何、怎么、什么、为什么、请、帮我、告诉、一下、一些、这个、那个
-3. 优先提取与业务、制度、流程相关的专业词汇
-
-问题：{question}
-回答：{answer}"""
+    # 精简 prompt，减少 token 消耗
+    content = f"问题：{question}\n答案：{answer}" if answer else f"问题：{question}"
+    prompt = f"从以下内容提取5个关键词，用逗号分隔，只输出关键词，不要输出其他内容。不要包含：如何、怎么、什么、为什么、请、帮我等通用词。\n{content}"
 
     try:
         req_data = {
             "model": settings.MIMO_MODEL,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3,
-            "max_tokens": 2000
+            "temperature": 0.1,  # 降低温度，提高稳定性
+            "max_tokens": 100    # 降低 token 数量
         }
 
         tmp_dir = tempfile.gettempdir()
@@ -57,31 +52,59 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
         with open(req_file, "w", encoding="utf-8") as f:
             json.dump(req_data, f, ensure_ascii=False)
 
-        subprocess.run([
+        # 使用更短的超时时间
+        result = subprocess.run([
             "curl", "-s", "-X", "POST",
             f"{settings.MIMO_BASE_URL}/chat/completions",
             "-H", f"Authorization: Bearer {settings.MIMO_API_KEY}",
             "-H", "Content-Type: application/json",
             "-d", f"@{req_file}",
             "-o", resp_file
-        ], timeout=60)
+        ], timeout=30)
+
+        # 检查响应文件是否存在
+        if not os.path.exists(resp_file):
+            return error("AI服务响应异常，请重试")
 
         with open(resp_file, "rb") as f:
             raw = f.read()
 
-        import re
-        match = re.search(rb'"content":"([^"]*)"', raw)
-        if match:
-            keywords = match.group(1).decode("utf-8").strip()
-        else:
-            keywords = ""
+        # 改进的响应解析
+        try:
+            resp = json.loads(raw.decode("utf-8"))
+            content = ""
+            choices = resp.get("choices", [])
+            if choices:
+                message = choices[0].get("message", {})
+                content = message.get("content", "")
 
-        if not keywords:
-            return error("关键词生成失败，请重试")
+            # 如果 content 为空，尝试从 reasoning_content 获取
+            if not content and choices:
+                content = message.get("reasoning_content", "")
 
-        return success({"keywords": keywords})
+            if not content:
+                return error("关键词生成失败，请重试")
+
+            # 清理关键词
+            keywords = content.strip()
+            # 移除可能的前缀
+            keywords = re.sub(r'^(关键词[：:]?\s*)', '', keywords)
+            # 移除换行符
+            keywords = keywords.replace('\n', ',')
+            # 移除多余的空格和标点
+            keywords = re.sub(r'\s+', '', keywords)
+            keywords = keywords.rstrip('。，,. ')
+
+            if not keywords:
+                return error("关键词生成失败，请重试")
+
+            return success({"keywords": keywords})
+
+        except json.JSONDecodeError:
+            return error("AI服务响应格式异常，请重试")
+
     except subprocess.TimeoutExpired:
-        return error("AI服务响应超时")
+        return error("AI服务响应超时，请稍后重试")
     except Exception as e:
         return error(f"AI服务异常: {str(e)}")
 
