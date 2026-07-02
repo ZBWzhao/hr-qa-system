@@ -525,38 +525,16 @@ async function sendMessage() {
       return
     }
 
-    // 检查是否是确认操作（用户回复"是"、"确认"、"好的"等）
-    const confirmWords = ['是', '确认', '好的', '可以', '对', '嗯', '行', '发吧', '发布吧']
-    const isConfirm = confirmWords.some(w => q.trim() === w || q.trim().startsWith(w))
-
-    // 检查上一条消息是否是询问确认
-    const lastMsg = chatStore.messages[chatStore.messages.length - 2]
-    const isAfterConfirm = lastMsg?.answer_type === 'notice_confirm'
-
-    if (isConfirm && isAfterConfirm) {
-      // 用户确认后，弹出公告表单
-      chatStore.messages.push({
-        role: 'assistant',
-        content: '好的，请填写公告信息：',
-        answer_type: 'notice_form',
-        source_docs: [],
-        record_id: null,
-        feedback: null,
-        is_favorite: false,
-      })
-      scrollToBottom()
-      openNoticeDialog()
-      return
-    }
-
     // 如果用户直接说了具体内容（比如"通知大家明天放假"），直接弹出表单并预填
-    const hasContent = q.length > 10 && !['发布公告', '发通知', '发布通知', '发公告', '通知公告', '通知大家'].includes(q.trim())
+    const pureKeywords = ['发布公告', '发通知', '发布通知', '发公告', '通知公告', '通知大家', '发个公告', '发个通知', '公告', '通知']
+    const isPureKeyword = pureKeywords.some(kw => q.trim() === kw || q.trim() === kw + '吧')
 
-    if (hasContent) {
-      // 尝试从用户输入中提取标题
-      const title = q.replace(/^(我想|我要|我需要|请|帮忙|帮我|)/, '').trim()
-      noticeForm.title = title.length < 50 ? title : ''
-      noticeForm.content = ''
+    if (!isPureKeyword && q.length > 6) {
+      // 用户说了具体内容，直接弹出表单并预填
+      let title = q.replace(/^(我想|我要|我需要|请|帮忙|帮我|发个|发一个|写个|写一个|发布公告说|发通知说|通知大家|)/, '').trim()
+      if (title.length > 50) title = ''
+      noticeForm.title = title
+      noticeForm.content = q.includes('：') || q.includes(':') ? q.split(/[:：]/).slice(1).join(':').trim() : ''
 
       chatStore.messages.push({
         role: 'assistant',
@@ -575,7 +553,7 @@ async function sendMessage() {
     // 否则询问用户确认
     chatStore.messages.push({
       role: 'assistant',
-      content: '您想要发布公告吗？请回复"确认"继续，或者直接告诉我公告的标题和内容。',
+      content: '您想要发布公告吗？\n\n请回复"确认"继续，或者直接告诉我公告内容，例如："通知大家明天放假一天"',
       answer_type: 'notice_confirm',
       source_docs: [],
       record_id: null,
@@ -584,6 +562,51 @@ async function sendMessage() {
     })
     scrollToBottom()
     return
+  }
+
+  // 前端拦截：检查是否是公告确认操作
+  const lastMsg = chatStore.messages[chatStore.messages.length - 2]
+  if (lastMsg?.answer_type === 'notice_confirm') {
+    // 确认词列表
+    const confirmWords = ['确认', '确定', '是', '好的', '可以', '对', '嗯', '行', '好', '发吧', '发布吧', 'ok', 'OK', 'yes']
+    const isConfirm = confirmWords.some(w => q.trim().toLowerCase() === w.toLowerCase())
+
+    if (isConfirm) {
+      // 用户确认后，弹出公告表单
+      chatStore.messages.push({
+        role: 'assistant',
+        content: '好的，请填写公告信息：',
+        answer_type: 'notice_form',
+        source_docs: [],
+        record_id: null,
+        feedback: null,
+        is_favorite: false,
+      })
+      scrollToBottom()
+      openNoticeDialog()
+      return
+    }
+
+    // 用户没有确认，而是直接说了公告内容
+    if (q.length > 4) {
+      let title = q.replace(/^(我想|我要|我需要|请|帮忙|帮我|发个|发一个|写个|写一个|)/, '').trim()
+      if (title.length > 50) title = ''
+      noticeForm.title = title
+      noticeForm.content = ''
+
+      chatStore.messages.push({
+        role: 'assistant',
+        content: '好的，我来帮您发布公告，请确认或补充以下信息：',
+        answer_type: 'notice_form',
+        source_docs: [],
+        record_id: null,
+        feedback: null,
+        is_favorite: false,
+      })
+      scrollToBottom()
+      openNoticeDialog()
+      return
+    }
   }
 
   // 正常调用后端
