@@ -7,6 +7,9 @@ from app.core.config import settings
 from app.core.database import engine, Base
 from app.api import auth, users, departments, documents, faqs, rules, search, chat, chat_history, conversations, feedback, notices, tickets, comments, recommendations, onboarding, reminders, gaps, roi, approvals, bot
 
+# 导入所有模型，确保 Base.metadata.create_all() 能创建所有表
+from app.models import conversation_state  # noqa: F401
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
