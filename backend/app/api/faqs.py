@@ -35,14 +35,24 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
 
     # 精简 prompt，减少 token 消耗
     content = f"问题：{question}\n答案：{answer}" if answer else f"问题：{question}"
-    prompt = f"从以下内容提取5个关键词，用逗号分隔，只输出关键词，不要输出其他内容。不要包含：如何、怎么、什么、为什么、请、帮我等通用词。\n{content}"
+    prompt = f"""从以下内容提取5个关键词，用逗号分隔，只输出关键词，不要输出其他内容。
+
+排除以下通用词：
+- 疑问词：如何、怎么、什么、为什么、哪个、哪些
+- 助动词/连词：可以、能、会、要、是、的、了、吗、呢、吧、啊、但是、可是、然而、而且、并且、或者、如果、因为、所以
+- 代词：我、你、他、她、它、我们、你们、他们、这个、那个、这些、那些
+- 其他通用词：请、帮、告诉、一下、一些、进行、使用、需要、可能、应该
+
+只保留名词、专业术语和有实际意义的词汇。
+
+{content}"""
 
     try:
         req_data = {
             "model": settings.MIMO_MODEL,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.1,  # 降低温度，提高稳定性
-            "max_tokens": 500    # 增加 token 数量以确保 content 有内容
+            "temperature": 0.1,
+            "max_tokens": 1000  # 增加 token 以确保完整输出
         }
 
         tmp_dir = tempfile.gettempdir()
