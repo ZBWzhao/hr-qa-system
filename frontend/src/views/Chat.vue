@@ -88,10 +88,13 @@
               <el-divider content-position="left"><span style="font-size: 12px; color: #9CA3AF">引用来源</span></el-divider>
               <el-tag v-for="(doc, i) in msg.source_docs" :key="i" size="small" type="info" style="margin: 2px">{{ docTitle(doc) }}</el-tag>
             </div>
-            <!-- 未命中：转人工按钮 -->
+            <!-- 未命中：转人工按钮 + 提交知识缺口 -->
             <div v-if="msg.role === 'assistant' && msg.answer_type === 'miss'" class="miss-actions">
               <el-button size="small" @click="focusInput">继续补充问题</el-button>
               <el-button size="small" type="primary" @click="triggerTicketFlow('我需要 HR 人工处理问题')">转人工处理</el-button>
+              <el-button size="small" type="success" plain @click="submitGap(msg)" :disabled="msg.gap_submitted">
+                {{ msg.gap_submitted ? '已提交' : '提交知识缺口' }}
+              </el-button>
             </div>
             <!-- 操作按钮 -->
             <div v-if="msg.role === 'assistant' && msg.record_id && !msg.ticket_confirm" class="message-actions">
@@ -199,6 +202,7 @@ import { createFeedback } from '../api/feedback'
 import { toggleFavorite } from '../api/chatHistory'
 import { createTicket } from '../api/tickets'
 import { createNotice } from '../api/notices'
+import { createGap } from '../api/gaps'
 import { useUserStore } from '../stores/user'
 import { useChatStore } from '../stores/chat'
 
@@ -461,6 +465,34 @@ async function handleDeleteConv(convId) {
     if (route.params.conversationId === convId) router.push('/chat')
     ElMessage.success('已删除')
   } catch {}
+}
+
+// ===== 提交知识缺口 =====
+async function submitGap(msg) {
+  try {
+    // 从消息内容中提取问题（去掉前缀）
+    const question = msg.content?.replace(/^抱歉，关于「/, '').replace(/」，当前知识库暂未找到明确依据。.*/s, '').trim()
+    if (!question) {
+      ElMessage.warning('无法提取问题内容')
+      return
+    }
+
+    await ElMessageBox.confirm(
+      `确定要将"${question}"提交为知识缺口吗？HR会收到通知并补充相关知识。`,
+      '提交知识缺口',
+      { type: 'info', confirmButtonText: '确定提交', cancelButtonText: '取消' }
+    )
+
+    await createGap({ question })
+    ElMessage.success('知识缺口已提交，感谢您的反馈！')
+
+    // 更新按钮状态
+    msg.gap_submitted = true
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error('提交失败，请稍后重试')
+    }
+  }
 }
 
 // ===== 核心：发送消息 =====

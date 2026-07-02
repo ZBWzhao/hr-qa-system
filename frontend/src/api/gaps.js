@@ -1,5 +1,9 @@
 import request from '../utils/request'
 
+export function createGap(data) {
+  return request.post('/gaps', data)
+}
+
 export function getGaps(params) {
   return request.get('/gaps', { params })
 }

@@ -1,12 +1,26 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.deps import require_roles
+from app.core.deps import get_current_user, require_roles
 from app.core.response import success, paginated
 from app.models.qa import QAMiss
 from app.models.user import User
 
 router = APIRouter()
+
+
+@router.post("")
+def create_gap(data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """创建知识缺口条目（允许所有用户）"""
+    question = data.get("question", "").strip()
+    if not question:
+        return success(None, "问题不能为空")
+
+    miss = QAMiss(user_id=current_user.id, question=question)
+    db.add(miss)
+    db.commit()
+    db.refresh(miss)
+    return success({"id": miss.id, "question": miss.question}, "知识缺口已提交")
 
 
 @router.get("")
