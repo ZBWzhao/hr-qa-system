@@ -20,8 +20,9 @@ class KeywordRequest(BaseModel):
 
 @router.post("/generate-keywords")
 def generate_keywords(data: KeywordRequest, current_user: User = Depends(require_roles("hr"))):
-    """生成关键词 - 使用本地分词，不依赖AI"""
-    import re
+    """生成关键词 - 使用jieba分词"""
+    import jieba
+    import jieba.posseg as pseg
 
     question = data.question.strip()
     answer = data.answer.strip()
@@ -32,7 +33,7 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
     # 合并问题和答案
     text = f"{question} {answer}"
 
-    # 通用词列表
+    # 通用词列表（停用词）
     stop_words = {
         # 疑问词
         '如何', '怎么', '什么', '为什么', '哪个', '哪些', '多少', '几',
@@ -42,44 +43,50 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
         '然后', '接着', '首先', '其次', '最后', '同时', '另外', '此外',
         # 代词
         '我', '你', '他', '她', '它', '我们', '你们', '他们', '这个', '那个',
-        '这些', '那些', '自己', '别人', '大家', '某', '某人', '某事',
+        '这些', '那些', '自己', '别人', '大家',
         # 其他通用词
         '请', '帮', '告诉', '一下', '一些', '进行', '使用', '需要', '可能', '应该',
-        '能够', '愿意', '必须', '不得不', '可以', '不能', '不会', '不要',
-        '一个', '一种', '一次', '一个', '第一', '第二', '第三',
+        '能够', '愿意', '必须', '不能', '不会', '不要',
+        '一个', '一种', '一次', '第一', '第二', '第三',
         '问题', '答案', '情况', '方面', '时候', '地方', '原因', '结果',
-        '工作', '公司', '员工', '人员', '部门', '管理', '规定', '制度',
-        '根据', '按照', '依据', '参照', '参考', '关于', '对于', '至于',
-        '以及', '还有', '或者', '还是', '不是', '没有', '已经', '正在',
-        '将要', '即将', '马上', '立即', '尽快', '尽快', '及时',
+        '超过', '不', '没', '没有', '已经', '正在',
     }
 
-    # 提取中文词（2-6个字）
-    chinese_words = re.findall(r'[一-鿿]{2,6}', text)
+    # 使用 jieba 进行词性标注分词
+    words = pseg.cut(text)
 
-    # 提取英文词（2个字母以上）
-    english_words = re.findall(r'[a-zA-Z]{2,}', text)
+    # 提取名词、动词、英文、数字
+    keywords = []
+    for word, flag in words:
+        # 跳过停用词
+        if word in stop_words:
+            continue
+        # 跳过单字
+        if len(word) < 2:
+            continue
+        # 跳过纯标点
+        if all(c in '，。！？、；：""''（）【】,.!?;:()[]' for c in word):
+            continue
 
-    # 提取数字+单位
-    number_units = re.findall(r'\d+[a-zA-Z%]+', text)
+        # 只保留名词(n)、动词(v)、英文词、数字
+        if flag.startswith('n') or flag.startswith('v') or flag == 'eng' or flag == 'm':
+            keywords.append(word)
 
-    # 合并所有词
-    all_words = chinese_words + english_words + number_units
+    # 去重并保持顺序
+    seen = set()
+    unique_keywords = []
+    for kw in keywords:
+        if kw not in seen:
+            seen.add(kw)
+            unique_keywords.append(kw)
 
-    # 过滤通用词，统计词频
-    word_freq = {}
-    for word in all_words:
-        if word.lower() not in stop_words and len(word) >= 2:
-            word_freq[word] = word_freq.get(word, 0) + 1
+    # 取前5个
+    result = unique_keywords[:5]
 
-    # 按词频排序，取前5个
-    sorted_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
-    keywords = [word for word, freq in sorted_words[:5]]
-
-    if not keywords:
+    if not result:
         return error("未能提取到有效关键词")
 
-    return success({"keywords": ",".join(keywords)})
+    return success({"keywords": ",".join(result)})
 
 
 @router.get("")
