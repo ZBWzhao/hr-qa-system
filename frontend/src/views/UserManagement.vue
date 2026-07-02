@@ -338,8 +338,30 @@ function showAddBatch() {
   }
 }
 
-function downloadTemplate() {
-  window.open('/api/v1/users/template', '_blank')
+async function downloadTemplate() {
+  try {
+    const token = localStorage.getItem('token')
+    const response = await fetch('/api/v1/users/template', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+
+    if (!response.ok) {
+      throw new Error('下载失败')
+    }
+
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'user_template.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('模板下载成功')
+  } catch (e) {
+    ElMessage.error('模板下载失败')
+  }
 }
 
 function handleFileChange(file) {
