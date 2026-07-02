@@ -20,11 +20,7 @@ class KeywordRequest(BaseModel):
 
 @router.post("/generate-keywords")
 def generate_keywords(data: KeywordRequest, current_user: User = Depends(require_roles("hr"))):
-    """AI生成关键词"""
-    import os
-    import json
-    import subprocess
-    import tempfile
+    """生成关键词 - 使用本地分词，不依赖AI"""
     import re
 
     question = data.question.strip()
@@ -33,120 +29,57 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
     if not question and not answer:
         return error("请输入问题或回答")
 
-    # 精简 prompt，减少 token 消耗
-    content = f"问题：{question}\n答案：{answer}" if answer else f"问题：{question}"
-    prompt = f"""从以下内容提取5个关键词，用逗号分隔，只输出关键词，不要输出其他内容。
+    # 合并问题和答案
+    text = f"{question} {answer}"
 
-排除以下通用词：
-- 疑问词：如何、怎么、什么、为什么、哪个、哪些
-- 助动词/连词：可以、能、会、要、是、的、了、吗、呢、吧、啊、但是、可是、然而、而且、并且、或者、如果、因为、所以
-- 代词：我、你、他、她、它、我们、你们、他们、这个、那个、这些、那些
-- 其他通用词：请、帮、告诉、一下、一些、进行、使用、需要、可能、应该
+    # 通用词列表
+    stop_words = {
+        # 疑问词
+        '如何', '怎么', '什么', '为什么', '哪个', '哪些', '多少', '几',
+        # 助动词/连词
+        '可以', '能', '会', '要', '是', '的', '了', '吗', '呢', '吧', '啊',
+        '但是', '可是', '然而', '而且', '并且', '或者', '如果', '因为', '所以',
+        '然后', '接着', '首先', '其次', '最后', '同时', '另外', '此外',
+        # 代词
+        '我', '你', '他', '她', '它', '我们', '你们', '他们', '这个', '那个',
+        '这些', '那些', '自己', '别人', '大家', '某', '某人', '某事',
+        # 其他通用词
+        '请', '帮', '告诉', '一下', '一些', '进行', '使用', '需要', '可能', '应该',
+        '能够', '愿意', '必须', '不得不', '可以', '不能', '不会', '不要',
+        '一个', '一种', '一次', '一个', '第一', '第二', '第三',
+        '问题', '答案', '情况', '方面', '时候', '地方', '原因', '结果',
+        '工作', '公司', '员工', '人员', '部门', '管理', '规定', '制度',
+        '根据', '按照', '依据', '参照', '参考', '关于', '对于', '至于',
+        '以及', '还有', '或者', '还是', '不是', '没有', '已经', '正在',
+        '将要', '即将', '马上', '立即', '尽快', '尽快', '及时',
+    }
 
-只保留名词、专业术语和有实际意义的词汇。
+    # 提取中文词（2-6个字）
+    chinese_words = re.findall(r'[一-鿿]{2,6}', text)
 
-{content}"""
+    # 提取英文词（2个字母以上）
+    english_words = re.findall(r'[a-zA-Z]{2,}', text)
 
-    try:
-        req_data = {
-            "model": settings.MIMO_MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.1,
-            "max_tokens": 1000  # 增加 token 以确保完整输出
-        }
+    # 提取数字+单位
+    number_units = re.findall(r'\d+[a-zA-Z%]+', text)
 
-        tmp_dir = tempfile.gettempdir()
-        req_file = os.path.join(tmp_dir, "mimo_kw_req.json")
-        resp_file = os.path.join(tmp_dir, "mimo_kw_resp.json")
+    # 合并所有词
+    all_words = chinese_words + english_words + number_units
 
-        with open(req_file, "w", encoding="utf-8") as f:
-            json.dump(req_data, f, ensure_ascii=False)
+    # 过滤通用词，统计词频
+    word_freq = {}
+    for word in all_words:
+        if word.lower() not in stop_words and len(word) >= 2:
+            word_freq[word] = word_freq.get(word, 0) + 1
 
-        # 使用更短的超时时间
-        result = subprocess.run([
-            "curl", "-s", "-X", "POST",
-            f"{settings.MIMO_BASE_URL}/chat/completions",
-            "-H", f"Authorization: Bearer {settings.MIMO_API_KEY}",
-            "-H", "Content-Type: application/json",
-            "-d", f"@{req_file}",
-            "-o", resp_file
-        ], timeout=30)
+    # 按词频排序，取前5个
+    sorted_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
+    keywords = [word for word, freq in sorted_words[:5]]
 
-        # 检查响应文件是否存在
-        if not os.path.exists(resp_file):
-            return error("AI服务响应异常，请重试")
+    if not keywords:
+        return error("未能提取到有效关键词")
 
-        with open(resp_file, "rb") as f:
-            raw = f.read()
-
-        # 改进的响应解析
-        try:
-            resp = json.loads(raw.decode("utf-8"))
-            content = ""
-            reasoning = ""
-            choices = resp.get("choices", [])
-            if choices:
-                message = choices[0].get("message", {})
-                content = message.get("content", "")
-                reasoning = message.get("reasoning_content", "")
-
-            # 如果 content 为空，从 reasoning 中提取关键词
-            if reasoning and not content:
-                # 使用正则表达式提取最后一个逗号分隔的词组
-                # 匹配模式：中文词,中文词,中文词 或 英文词,英文词
-                pattern = r'[一-龥a-zA-Z]{2,}(?:[,，][一-龥a-zA-Z]{2,})+'
-                matches = re.findall(pattern, reasoning)
-
-                if matches:
-                    # 取最后一个匹配（通常是最终的关键词列表）
-                    content = matches[-1]
-
-            # 如果还是没有，尝试更宽松的匹配
-            if not content and reasoning:
-                # 查找所有包含逗号的行
-                lines = reasoning.strip().split('\n')
-                for line in reversed(lines):
-                    line = line.strip()
-                    # 检查是否包含逗号
-                    if ',' in line or '，' in line:
-                        # 提取逗号分隔的部分
-                        parts = re.split(r'[,，]', line)
-                        # 过滤掉太长的部分（可能是句子）
-                        valid_parts = [p.strip() for p in parts if 1 < len(p.strip()) < 10]
-                        if len(valid_parts) >= 3:
-                            content = ','.join(valid_parts)
-                            break
-
-            if not content:
-                return error("关键词生成失败，请重试")
-
-            # 清理关键词
-            keywords = content.strip()
-            # 移除换行符
-            keywords = keywords.replace('\n', ',')
-            # 移除多余的空格
-            keywords = re.sub(r'\s+', '', keywords)
-            # 移除末尾的标点
-            keywords = keywords.rstrip('。，,. ')
-
-            # 验证关键词格式
-            if not keywords or len(keywords) < 2:
-                return error("关键词生成失败，请重试")
-
-            # 如果没有逗号，可能是单个词或句子，尝试提取
-            if ',' not in keywords and '，' not in keywords:
-                if len(keywords) > 20:
-                    return error("关键词生成失败，请重试")
-
-            return success({"keywords": keywords})
-
-        except json.JSONDecodeError:
-            return error("AI服务响应格式异常，请重试")
-
-    except subprocess.TimeoutExpired:
-        return error("AI服务响应超时，请稍后重试")
-    except Exception as e:
-        return error(f"AI服务异常: {str(e)}")
+    return success({"keywords": ",".join(keywords)})
 
 
 @router.get("")
