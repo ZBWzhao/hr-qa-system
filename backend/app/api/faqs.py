@@ -42,7 +42,7 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
             "model": settings.MIMO_MODEL,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.1,  # 降低温度，提高稳定性
-            "max_tokens": 100    # 降低 token 数量
+            "max_tokens": 500    # 增加 token 数量以确保 content 有内容
         }
 
         tmp_dir = tempfile.gettempdir()
@@ -73,34 +73,35 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
         try:
             resp = json.loads(raw.decode("utf-8"))
             content = ""
+            reasoning = ""
             choices = resp.get("choices", [])
             if choices:
                 message = choices[0].get("message", {})
                 content = message.get("content", "")
+                reasoning = message.get("reasoning_content", "")
 
-            # 如果 content 为空，尝试从 reasoning_content 获取
-            if not content and choices:
-                content = message.get("reasoning_content", "")
+            # MiMo 模型可能将内容放在 reasoning_content 中
+            # 从 reasoning 中提取关键词
+            if reasoning and not content:
+                # 尝试从 reasoning 中找到关键词部分
+                # 通常在最后几行，格式为 "关键词：xxx,xxx,xxx" 或直接 "xxx,xxx,xxx"
+                lines = reasoning.strip().split('\n')
+                for line in reversed(lines):
+                    line = line.strip()
+                    # 检查是否包含逗号分隔的关键词
+                    if ',' in line or '，' in line:
+                        # 移除可能的前缀
+                        line = re.sub(r'^(关键词[：:]?\s*)', '', line)
+                        # 检查是否像关键词（包含逗号，长度适中）
+                        if 5 < len(line) < 100:
+                            content = line
+                            break
 
             if not content:
                 return error("关键词生成失败，请重试")
 
-            # 清理关键词 - 只保留逗号分隔的关键词部分
+            # 清理关键词
             keywords = content.strip()
-
-            # 如果内容包含冒号或换行，只取最后一行（通常是关键词）
-            if '\n' in keywords:
-                lines = [l.strip() for l in keywords.split('\n') if l.strip()]
-                # 找到最后一行看起来像关键词的行（包含逗号）
-                for line in reversed(lines):
-                    if ',' in line or '，' in line:
-                        keywords = line
-                        break
-                else:
-                    keywords = lines[-1] if lines else ""
-
-            # 移除可能的前缀
-            keywords = re.sub(r'^(关键词[：:]?\s*)', '', keywords)
             # 移除换行符
             keywords = keywords.replace('\n', ',')
             # 移除多余的空格
@@ -108,13 +109,12 @@ def generate_keywords(data: KeywordRequest, current_user: User = Depends(require
             # 移除末尾的标点
             keywords = keywords.rstrip('。，,. ')
 
-            # 验证关键词格式（应该包含逗号分隔）
+            # 验证关键词格式
             if not keywords or len(keywords) < 2:
                 return error("关键词生成失败，请重试")
 
             # 如果没有逗号，可能是单个词或句子，尝试提取
             if ',' not in keywords and '，' not in keywords:
-                # 如果内容太长，可能是句子而不是关键词
                 if len(keywords) > 20:
                     return error("关键词生成失败，请重试")
 
