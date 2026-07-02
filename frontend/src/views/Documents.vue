@@ -7,7 +7,7 @@
       </div>
     </template>
     <div style="display: flex; gap: 12px; margin-bottom: 16px">
-      <el-input v-model="filters.keyword" placeholder="搜索文档标题..." clearable style="width: 260px" @keyup.enter="fetchData">
+      <el-input v-model="filters.keyword" placeholder="搜索标题或内容..." clearable style="width: 260px" @keyup.enter="fetchData" @clear="fetchData">
         <template #append>
           <el-button :icon="Search" @click="fetchData" />
         </template>
