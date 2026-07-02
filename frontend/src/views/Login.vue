@@ -59,10 +59,6 @@
         </el-form-item>
       </el-form>
 
-      <div class="footer-links">
-        <el-link type="primary" @click="$router.push('/register')">还没有账号？立即注册</el-link>
-      </div>
-
       <div class="demo-accounts">
         <div class="divider">
           <span>演示账号</span>

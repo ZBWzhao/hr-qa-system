@@ -10,6 +10,103 @@ from app.models.user import User
 router = APIRouter()
 
 
+@router.post("")
+def create_user(data: dict, current_user: User = Depends(require_roles("admin")), db: Session = Depends(get_db)):
+    """管理员创建单个用户"""
+    username = data.get("username", "").strip()
+    real_name = data.get("real_name", "").strip()
+    email = data.get("email", "").strip()
+    role = data.get("role", "employee")
+    password = data.get("password", "123456")
+
+    if not username or not real_name or not email:
+        return error("工号、姓名、邮箱不能为空")
+
+    # 检查用户名是否已存在
+    existing = db.query(User).filter(User.username == username).first()
+    if existing:
+        return error(f"工号 {username} 已存在")
+
+    # 检查邮箱是否已存在
+    existing_email = db.query(User).filter(User.email == email).first()
+    if existing_email:
+        return error(f"邮箱 {email} 已被使用")
+
+    user = User(
+        username=username,
+        real_name=real_name,
+        email=email,
+        role=role,
+        password_hash=get_password_hash(password),
+        status=1  # 管理员创建的用户直接启用
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return success(UserOut.model_validate(user).model_dump(), "用户创建成功")
+
+
+@router.post("/batch")
+def batch_create_users(data: dict, current_user: User = Depends(require_roles("admin")), db: Session = Depends(get_db)):
+    """管理员批量创建用户"""
+    users_data = data.get("users", [])
+    if not users_data:
+        return error("用户列表为空")
+
+    success_count = 0
+    failed_count = 0
+    errors = []
+
+    for i, user_data in enumerate(users_data):
+        username = user_data.get("username", "").strip()
+        real_name = user_data.get("real_name", "").strip()
+        email = user_data.get("email", "").strip()
+        role = user_data.get("role", "employee")
+        password = user_data.get("password", "123456")
+
+        if not username or not real_name or not email:
+            errors.append(f"第 {i + 1} 行：工号、姓名、邮箱不能为空")
+            failed_count += 1
+            continue
+
+        # 检查用户名是否已存在
+        existing = db.query(User).filter(User.username == username).first()
+        if existing:
+            errors.append(f"第 {i + 1} 行：工号 {username} 已存在")
+            failed_count += 1
+            continue
+
+        # 检查邮箱是否已存在
+        existing_email = db.query(User).filter(User.email == email).first()
+        if existing_email:
+            errors.append(f"第 {i + 1} 行：邮箱 {email} 已被使用")
+            failed_count += 1
+            continue
+
+        try:
+            user = User(
+                username=username,
+                real_name=real_name,
+                email=email,
+                role=role,
+                password_hash=get_password_hash(password),
+                status=1  # 管理员创建的用户直接启用
+            )
+            db.add(user)
+            success_count += 1
+        except Exception as e:
+            errors.append(f"第 {i + 1} 行：创建失败 - {str(e)}")
+            failed_count += 1
+
+    db.commit()
+
+    return success({
+        "success": success_count,
+        "failed": failed_count,
+        "errors": errors
+    }, f"导入完成：成功 {success_count} 条，失败 {failed_count} 条")
+
+
 @router.get("")
 def list_users(status: int = None, page: int = 1, page_size: int = 20, current_user: User = Depends(require_roles("admin")), db: Session = Depends(get_db)):
     query = db.query(User)
