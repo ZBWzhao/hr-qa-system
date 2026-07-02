@@ -75,9 +75,9 @@
           <el-table-column prop="status" label="状态" width="80">
             <template #default="{ row }"><el-tag :type="feedbackStatusType(row.status)" size="small">{{ feedbackStatusLabel(row.status) }}</el-tag></template>
           </el-table-column>
-          <el-table-column label="操作" width="100" fixed="right">
+          <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="row.status === 'pending'" size="small" type="primary" @click="showHandleFeedback(row)">处理</el-button>
+              <el-button size="small" @click="showHandleFeedback(row)">{{ row.status === 'pending' ? '处理' : '查看' }}</el-button>
             </template>
           </el-table-column>
         </el-table>
