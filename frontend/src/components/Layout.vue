@@ -159,9 +159,6 @@ function handleLogout() {
   router.push('/login')
 }
 
-// 暴露刷新方法供子组件调用
-defineExpose({ fetchUnread, fetchTicketStats })
-
 onMounted(() => {
   fetchUnread()
   fetchTicketStats()
