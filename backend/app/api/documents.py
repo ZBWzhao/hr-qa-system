@@ -51,11 +51,13 @@ def extract_keywords(text: str) -> str:
 
 
 @router.get("")
-def list_documents(category: Optional[str] = None, status: Optional[str] = None, page: int = 1, page_size: int = 20, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_documents(keyword: Optional[str] = None, category: Optional[str] = None, status: Optional[str] = None, page: int = 1, page_size: int = 20, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(Document)
     # 普通员工只能看已发布文档
     if current_user.role not in ("hr", "admin"):
         query = query.filter(Document.status == "published")
+    if keyword:
+        query = query.filter(Document.title.contains(keyword))
     if category:
         query = query.filter(Document.category == category)
     if status:

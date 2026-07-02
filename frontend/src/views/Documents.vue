@@ -7,6 +7,11 @@
       </div>
     </template>
     <div style="display: flex; gap: 12px; margin-bottom: 16px">
+      <el-input v-model="filters.keyword" placeholder="搜索文档标题..." clearable style="width: 260px" @keyup.enter="fetchData">
+        <template #append>
+          <el-button :icon="Search" @click="fetchData" />
+        </template>
+      </el-input>
       <el-select v-model="filters.category" placeholder="全部分类" clearable @change="fetchData">
         <el-option label="考勤" value="attendance" />
         <el-option label="薪酬" value="salary" />
@@ -132,7 +137,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document } from '@element-plus/icons-vue'
+import { Document, Search } from '@element-plus/icons-vue'
 import { getDocuments, createDocument, updateDocument, deleteDocument, publishDocument, archiveDocument, getDocument } from '../api/documents'
 import { useUserStore } from '../stores/user'
 
@@ -142,7 +147,7 @@ const loading = ref(false)
 const documents = ref([])
 const page = ref(1)
 const total = ref(0)
-const filters = reactive({ category: '', status: '' })
+const filters = reactive({ keyword: '', category: '', status: '' })
 const dialogVisible = ref(false)
 const editId = ref(null)
 const form = reactive({ title: '', category: 'other', content_text: '' })

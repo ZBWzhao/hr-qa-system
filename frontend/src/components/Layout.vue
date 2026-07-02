@@ -38,6 +38,10 @@
 
         <!-- HR端：知识库运营 -->
         <template v-if="userStore.isHR">
+          <el-menu-item index="/chat">
+            <el-icon><ChatDotRound /></el-icon>
+            <template #title>智能问答</template>
+          </el-menu-item>
           <el-menu-item index="/documents">
             <el-icon><Folder /></el-icon>
             <template #title>知识库管理</template>

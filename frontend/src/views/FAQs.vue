@@ -2,12 +2,16 @@
   <el-card>
     <template #header>
       <div style="display: flex; justify-content: space-between; align-items: center">
-        <span style="font-weight: 600; color: #111827">FAQ 管理</span>
+        <span style="font-weight: 600; color: #111827">标准答案库</span>
         <el-button v-if="userStore.isHR" type="primary" @click="showDialog()">新增FAQ</el-button>
       </div>
     </template>
     <div style="display: flex; gap: 12px; margin-bottom: 16px">
-      <el-input v-model="keyword" placeholder="搜索问题..." clearable style="width: 300px" @keyup.enter="fetchData" />
+      <el-input v-model="keyword" placeholder="搜索问题..." clearable style="width: 300px" @keyup.enter="fetchData">
+        <template #append>
+          <el-button :icon="Search" @click="fetchData" />
+        </template>
+      </el-input>
       <el-select v-model="category" placeholder="全部分类" clearable @change="fetchData">
         <el-option label="考勤" value="attendance" />
         <el-option label="薪酬" value="salary" />
@@ -79,6 +83,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 import { getFaqs, getAllFaqs, getFaq, createFaq, updateFaq, deleteFaq } from '../api/faqs'
 import { useUserStore } from '../stores/user'
 
