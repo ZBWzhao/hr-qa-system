@@ -9,7 +9,12 @@
       </el-col>
       <el-col :span="12">
         <el-card>
-          <template #header><span style="font-weight: 600; color: #111827">咨询类别分布</span></template>
+          <template #header>
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <span style="font-weight: 600; color: #111827">咨询类别分布</span>
+              <el-button text type="primary" size="small" @click="$router.push('/todo')">查看详情</el-button>
+            </div>
+          </template>
           <div ref="categoryChart" style="height: 350px"></div>
         </el-card>
       </el-col>
@@ -17,13 +22,23 @@
     <el-row :gutter="20" style="margin-top: 20px">
       <el-col :span="12">
         <el-card>
-          <template #header><span style="font-weight: 600; color: #111827">高频问题排行</span></template>
+          <template #header>
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <span style="font-weight: 600; color: #111827">高频问题排行</span>
+              <el-button text type="primary" size="small" @click="$router.push('/knowledge')">查看详情</el-button>
+            </div>
+          </template>
           <div ref="faqChart" style="height: 350px"></div>
         </el-card>
       </el-col>
       <el-col :span="12">
         <el-card>
-          <template #header><span style="font-weight: 600; color: #111827">工单状态分布</span></template>
+          <template #header>
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <span style="font-weight: 600; color: #111827">工单状态分布</span>
+              <el-button text type="primary" size="small" @click="$router.push('/todo')">查看详情</el-button>
+            </div>
+          </template>
           <div ref="ticketChart" style="height: 350px"></div>
         </el-card>
       </el-col>
@@ -33,11 +48,14 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { getRoiReport } from '../api/roi'
 import { getTicketStats } from '../api/tickets'
 import { getFaqs } from '../api/faqs'
 import { getCategoryStats } from '../api/chat'
+
+const router = useRouter()
 
 const trendChart = ref()
 const categoryChart = ref()
@@ -96,9 +114,15 @@ async function initCategoryChart() {
         },
         data: categories.map(c => ({
           value: c.value,
-          name: c.name
+          name: c.name,
+          type: c.type
         }))
       }]
+    })
+
+    // 添加点击事件
+    chart.on('click', function(params) {
+      router.push('/todo')
     })
   } catch (e) {
     // 如果获取失败，显示默认数据
@@ -153,6 +177,11 @@ async function initFaqChart() {
         barWidth: '60%'
       }]
     })
+
+    // 添加点击事件
+    chart.on('click', function(params) {
+      router.push('/knowledge')
+    })
   } catch (e) {
     chart.setOption({
       tooltip: {},
@@ -169,10 +198,17 @@ async function initTicketChart() {
     const res = await getTicketStats()
     const d = res.data || {}
     chart.setOption({
-      tooltip: { trigger: 'item' },
+      tooltip: {
+        trigger: 'item',
+        formatter: '{b}: {c} ({d}%)'
+      },
       legend: { bottom: 0 },
       series: [{
         type: 'pie', radius: ['40%', '70%'],
+        label: {
+          show: true,
+          formatter: '{b}: {c}'
+        },
         data: [
           { value: d.pending || 0, name: '待处理' },
           { value: d.processing || 0, name: '处理中' },
@@ -180,6 +216,11 @@ async function initTicketChart() {
           { value: d.rejected || 0, name: '已驳回' }
         ]
       }]
+    })
+
+    // 添加点击事件
+    chart.on('click', function(params) {
+      router.push('/todo')
     })
   } catch (e) {}
 }
