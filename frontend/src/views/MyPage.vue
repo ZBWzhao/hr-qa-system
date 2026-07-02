@@ -19,34 +19,6 @@
     <!-- 功能标签页 -->
     <el-card>
       <el-tabs v-model="activeTab">
-        <!-- 问答历史 -->
-        <el-tab-pane label="问答历史" name="history">
-          <div style="display: flex; gap: 12px; margin-bottom: 16px">
-            <el-input v-model="historyKeyword" placeholder="搜索问题或回答..." clearable style="width: 300px" @keyup.enter="fetchHistory" />
-            <el-button type="primary" @click="fetchHistory">搜索</el-button>
-            <el-checkbox v-model="onlyFavorite" @change="fetchHistory">仅收藏</el-checkbox>
-          </div>
-          <el-table :data="historyRecords" v-loading="historyLoading" stripe>
-            <el-table-column prop="question" label="问题" min-width="250" show-overflow-tooltip />
-            <el-table-column prop="answer_type" label="类型" width="80">
-              <template #default="{ row }"><el-tag size="small">{{ answerTypeLabel(row.answer_type) }}</el-tag></template>
-            </el-table-column>
-            <el-table-column prop="is_favorite" label="收藏" width="70">
-              <template #default="{ row }"><el-icon :color="row.is_favorite ? '#f5a623' : '#ccc'" style="cursor: pointer" @click="handleFav(row)"><Star /></el-icon></template>
-            </el-table-column>
-            <el-table-column prop="created_at" label="时间" width="110">
-              <template #default="{ row }">{{ row.created_at?.substring(0, 10) }}</template>
-            </el-table-column>
-            <el-table-column label="操作" width="130">
-              <template #default="{ row }">
-                <el-button size="small" @click="viewDetail(row)">详情</el-button>
-                <el-button size="small" type="danger" @click="handleDeleteHistory(row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-pagination style="margin-top: 16px; justify-content: center" :current-page="historyPage" :page-size="20" :total="historyTotal" layout="prev, pager, next" @current-change="p => { historyPage = p; fetchHistory() }" />
-        </el-tab-pane>
-
         <!-- 我的收藏 -->
         <el-tab-pane label="我的收藏" name="favorites">
           <el-table :data="favRecords" v-loading="favLoading" stripe>
@@ -57,10 +29,10 @@
             <el-table-column prop="created_at" label="时间" width="110">
               <template #default="{ row }">{{ row.created_at?.substring(0, 10) }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="130">
+            <el-table-column label="操作" width="180">
               <template #default="{ row }">
-                <el-button size="small" @click="viewDetail(row)">详情</el-button>
-                <el-button size="small" type="warning" @click="handleFav(row)">取消收藏</el-button>
+                <el-button size="small" type="primary" plain @click="viewDetail(row)">详情</el-button>
+                <el-button size="small" type="danger" plain @click="handleFav(row)">取消收藏</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -160,32 +132,12 @@ import { getTickets, createTicket } from '../api/tickets'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
-const activeTab = ref('history')
+const activeTab = ref('favorites')
 
-// ===== 问答历史 =====
-const historyLoading = ref(false)
-const historyRecords = ref([])
-const historyPage = ref(1)
-const historyTotal = ref(0)
-const historyKeyword = ref('')
-const onlyFavorite = ref(false)
 const detailVisible = ref(false)
 const detail = ref({})
 
 function answerTypeLabel(t) { return { faq: 'FAQ', rule: '规则', rag: 'RAG', miss: '未命中', mock: '未命中' }[t] || t || '—' }
-
-async function fetchHistory() {
-  historyLoading.value = true
-  try {
-    const params = { page: historyPage.value }
-    const kw = historyKeyword.value?.trim()
-    if (kw) params.keyword = kw
-    if (onlyFavorite.value) params.is_favorite = 1
-    const res = await getChatHistory(params)
-    historyRecords.value = res.data?.items || []
-    historyTotal.value = res.data?.total || 0
-  } catch (e) {} finally { historyLoading.value = false }
-}
 
 function viewDetail(row) { detail.value = row; detailVisible.value = true }
 
@@ -196,13 +148,6 @@ async function handleFav(row) {
     ElMessage.success(row.is_favorite ? '已收藏' : '已取消收藏')
     if (activeTab.value === 'favorites') fetchFavorites()
   } catch (e) {}
-}
-
-async function handleDeleteHistory(row) {
-  await ElMessageBox.confirm('确认删除？', '提示', { type: 'warning' })
-  await deleteHistory(row.id)
-  ElMessage.success('删除成功')
-  fetchHistory()
 }
 
 // ===== 我的收藏 =====
@@ -270,11 +215,10 @@ async function submitCreateTicket() {
 
 // ===== 标签切换时加载数据 =====
 watch(activeTab, (tab) => {
-  if (tab === 'history') fetchHistory()
-  else if (tab === 'favorites') fetchFavorites()
+  if (tab === 'favorites') fetchFavorites()
   else if (tab === 'feedback') fetchFeedbacks()
   else if (tab === 'tickets') fetchTickets()
 })
 
-onMounted(() => fetchHistory())
+onMounted(() => fetchFavorites())
 </script>

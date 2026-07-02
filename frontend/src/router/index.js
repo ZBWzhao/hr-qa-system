@@ -50,7 +50,7 @@ const router = createRouter({
 })
 
 // admin 只能访问的页面白名单
-const adminAllowed = ['/documents', '/user-management', '/department-management', '/profile']
+const adminAllowed = ['/documents', '/user-management', '/department-management', '/profile', '/notices', '/tickets', '/feedback', '/faqs', '/statistics']
 
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')

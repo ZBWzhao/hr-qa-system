@@ -54,8 +54,10 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getNotices, getNotice, createNotice } from '../api/notices'
 import { useUserStore } from '../stores/user'
+import { useRouter } from 'vue-router'
 
 const userStore = useUserStore()
+const router = useRouter()
 const notices = ref([])
 const page = ref(1)
 const total = ref(0)
@@ -78,6 +80,9 @@ async function viewNotice(notice) {
     detail.value = res.data
     notice.is_read = true
     detailVisible.value = true
+    // 刷新Layout中的未读数
+    const layout = router.currentRoute.value.matched[0]?.instances?.default
+    if (layout?.fetchUnread) layout.fetchUnread()
   } catch (e) {}
 }
 

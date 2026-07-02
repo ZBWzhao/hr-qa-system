@@ -42,6 +42,15 @@
             <el-icon><ChatDotRound /></el-icon>
             <template #title>智能问答</template>
           </el-menu-item>
+          <el-menu-item index="/tickets">
+            <el-icon><Tickets /></el-icon>
+            <template #title>
+              <div style="display: flex; align-items: center; width: 100%">
+                <span>工单管理</span>
+                <el-badge v-if="pendingTickets > 0" :value="pendingTickets" :max="99" style="margin-left: auto; margin-top: -6px" />
+              </div>
+            </template>
+          </el-menu-item>
           <el-menu-item index="/documents">
             <el-icon><Folder /></el-icon>
             <template #title>知识库管理</template>
@@ -60,7 +69,12 @@
           </el-menu-item>
           <el-menu-item index="/notices">
             <el-icon><Bell /></el-icon>
-            <template #title>通知发布</template>
+            <template #title>
+              <div style="display: flex; align-items: center; width: 100%">
+                <span>通知发布</span>
+                <el-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" style="margin-left: auto; margin-top: -6px" />
+              </div>
+            </template>
           </el-menu-item>
           <el-menu-item index="/statistics">
             <el-icon><DataAnalysis /></el-icon>
@@ -118,10 +132,12 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { getUnreadCount } from '../api/notices'
+import { getTicketStats } from '../api/tickets'
 
 const router = useRouter()
 const userStore = useUserStore()
 const unreadCount = ref(0)
+const pendingTickets = ref(0)
 
 async function fetchUnread() {
   try {
@@ -130,13 +146,25 @@ async function fetchUnread() {
   } catch (e) {}
 }
 
+async function fetchTicketStats() {
+  if (!userStore.isHR) return
+  try {
+    const res = await getTicketStats()
+    pendingTickets.value = res.data?.pending || 0
+  } catch (e) {}
+}
+
 function handleLogout() {
   userStore.logout()
   router.push('/login')
 }
 
+// 暴露刷新方法供子组件调用
+defineExpose({ fetchUnread, fetchTicketStats })
+
 onMounted(() => {
   fetchUnread()
+  fetchTicketStats()
 })
 </script>
 

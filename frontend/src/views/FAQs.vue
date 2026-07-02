@@ -3,7 +3,7 @@
     <template #header>
       <div style="display: flex; justify-content: space-between; align-items: center">
         <span style="font-weight: 600; color: #111827">标准答案库</span>
-        <el-button v-if="userStore.isHR" type="primary" @click="showDialog()">新增FAQ</el-button>
+        <el-button v-if="userStore.isHR" type="primary" @click="showDialog()">新增标准答案</el-button>
       </div>
     </template>
     <div style="display: flex; gap: 12px; margin-bottom: 16px">
@@ -44,7 +44,7 @@
     </el-table>
     <el-pagination style="margin-top: 16px; justify-content: center" :current-page="page" :page-size="20" :total="total" layout="prev, pager, next" @current-change="p => { page = p; fetchData() }" />
 
-    <el-dialog v-model="dialogVisible" :title="editId ? '编辑FAQ' : '新增FAQ'" width="600px">
+    <el-dialog v-model="dialogVisible" :title="editId ? '编辑标准答案' : '新增标准答案'" width="600px">
       <el-form :model="form" label-width="80px">
         <el-form-item label="问题"><el-input v-model="form.question" /></el-form-item>
         <el-form-item label="回答"><el-input v-model="form.answer" type="textarea" :rows="6" /></el-form-item>
@@ -74,7 +74,7 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="detailVisible" title="FAQ详情" size="50%">
+    <el-drawer v-model="detailVisible" title="标准答案详情" size="50%">
       <h3>{{ detail.question }}</h3>
       <el-divider />
       <div style="white-space: pre-wrap; line-height: 1.8">{{ detail.answer }}</div>
