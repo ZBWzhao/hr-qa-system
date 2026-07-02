@@ -53,23 +53,53 @@ def extract_keywords(text: str) -> str:
 
 @router.get("")
 def list_documents(keyword: Optional[str] = None, category: Optional[str] = None, status: Optional[str] = None, page: int = 1, page_size: int = 20, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    import re
+
     query = db.query(Document)
     # 普通员工只能看已发布文档
     if current_user.role not in ("hr", "admin"):
         query = query.filter(Document.status == "published")
     if keyword:
-        query = query.filter(Document.title.contains(keyword))
+        # 同时搜索标题和内容
+        query = query.filter(
+            (Document.title.contains(keyword)) | (Document.content_text.contains(keyword))
+        )
     if category:
         query = query.filter(Document.category == category)
     if status:
         query = query.filter(Document.status == status)
     total = query.count()
     items = query.order_by(Document.updated_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    def get_highlighted_content(content, keyword, context_len=150):
+        """获取关键词周围的内容并高亮"""
+        if not content or not keyword:
+            return ""
+        # 查找关键词位置
+        idx = content.lower().find(keyword.lower())
+        if idx == -1:
+            return ""
+        # 截取关键词周围的内容
+        start = max(0, idx - context_len)
+        end = min(len(content), idx + len(keyword) + context_len)
+        snippet = content[start:end]
+        if start > 0:
+            snippet = "..." + snippet
+        if end < len(content):
+            snippet = snippet + "..."
+        # 高亮关键词
+        pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+        snippet = pattern.sub(f'<em>{keyword}</em>', snippet)
+        return snippet
+
     result = []
     for d in items:
         doc_dict = DocumentOut.model_validate(d).model_dump()
         uploader = db.query(User).filter(User.id == d.uploader_id).first()
         doc_dict["uploader_name"] = uploader.real_name if uploader else "未知"
+        # 如果有搜索关键词，添加高亮的内容片段
+        if keyword:
+            doc_dict["highlighted_content"] = get_highlighted_content(d.content_text, keyword)
         result.append(doc_dict)
     return paginated(result, total, page, page_size)
 

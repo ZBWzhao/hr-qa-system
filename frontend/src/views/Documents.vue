@@ -27,9 +27,12 @@
       </el-select>
     </div>
     <el-table :data="documents" v-loading="loading" stripe>
-      <el-table-column prop="title" label="文档标题" min-width="200">
+      <el-table-column prop="title" label="文档标题" min-width="250">
         <template #default="{ row }">
-          <span v-html="highlightTitle(row.title)"></span>
+          <div>
+            <span v-html="highlightTitle(row.title)"></span>
+          </div>
+          <div v-if="row.highlighted_content" class="search-snippet" v-html="row.highlighted_content"></div>
         </template>
       </el-table-column>
       <el-table-column prop="category" label="分类" width="100">
@@ -357,5 +360,21 @@ onMounted(() => {
   border-radius: 8px;
   color: #374151;
   font-size: 14px;
+}
+.search-snippet {
+  font-size: 12px;
+  color: #6B7280;
+  margin-top: 4px;
+  line-height: 1.5;
+  max-height: 40px;
+  overflow: hidden;
+}
+.search-snippet :deep(em) {
+  color: #f5222d;
+  font-style: normal;
+  font-weight: 600;
+  background: #fff1f0;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 </style>
