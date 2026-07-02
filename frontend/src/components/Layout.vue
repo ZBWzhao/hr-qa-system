@@ -128,7 +128,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { getUnreadCount } from '../api/notices'
@@ -154,8 +154,12 @@ async function fetchTicketStats() {
   } catch (e) {}
 }
 
-function handleLogout() {
+async function handleLogout() {
+  // 先清除数据
   userStore.logout()
+  // 等待下一个 tick 确保数据清除完成
+  await nextTick()
+  // 然后跳转
   router.push('/login')
 }
 

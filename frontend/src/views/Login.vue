@@ -84,9 +84,11 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { login } from '../api/auth'
 import { useUserStore } from '../stores/user'
+import { useChatStore } from '../stores/chat'
 
 const router = useRouter()
 const userStore = useUserStore()
+const chatStore = useChatStore()
 const formRef = ref()
 const loading = ref(false)
 const cardVisible = ref(false)
@@ -106,6 +108,17 @@ async function handleLogin() {
   loading.value = true
   try {
     const res = await login(form)
+
+    // 清除旧的聊天数据（防止切换账号时数据串号）
+    chatStore.clearAll()
+    // 清除笔记缓存
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('chat-notes-')) {
+        localStorage.removeItem(key)
+      }
+    })
+
+    // 设置新用户信息
     userStore.setToken(res.data.access_token)
     userStore.setUser(res.data.user)
     ElMessage.success('登录成功')
