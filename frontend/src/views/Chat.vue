@@ -258,12 +258,15 @@ watch(notes, saveNotes)
 const ticketKeywords = [
   '申请', '办理', '开具', '证明', '信息变更', '转人工', '联系HR',
   '提交工单', '人工处理', '考勤异常', '工单', '提单', '求助HR',
-  '需要HR', '找HR', 'HR处理', '想开证明', '想办', '想申请'
+  '需要HR', '找HR', 'HR处理', '想开证明', '想办', '想申请',
+  '帮我申请', '帮我办理', '帮我开具', '帮我提交', '帮我处理',
+  '能不能申请', '能不能办理', '能不能开具', '可以申请', '可以办理',
+  '申请一份', '提交一份', '开一份', '办一个'
 ]
 const ticketTypeMap = {
   '证明': 'certify', '在职': 'certify', '开具': 'certify', '收入': 'certify',
   '变更': 'info_change', '修改': 'info_change', '联系方式': 'info_change',
-  '考勤': 'other', '异常': 'other',
+  '考勤': 'other', '异常': 'other', '报销': 'other',
 }
 
 // 工单表单相关
@@ -417,17 +420,20 @@ function needsClarification(text) {
   // 1. 问题太短（少于4个字）
   if (text.length < 4) return true
 
-  // 2. 指代不明
-  const vagueReferences = ["这个", "那个", "它", "这个东西", "那个东西"]
+  // 2. 指代不明（但要排除有上下文的情况）
+  const vagueReferences = ["这个东西", "那个东西", "这个事情", "那个事情"]
+  // 简单的"这个"、"那个"如果后面跟了动词，可能是有明确意图的
   if (vagueReferences.some(ref => text.includes(ref))) return true
 
-  // 3. 模糊请求（只有动词没有对象）
-  const vagueRequests = ["怎么办", "怎么弄", "怎么做", "帮我", "告诉我"]
-  if (vagueRequests.some(req => text.includes(req)) && text.length < 10) return true
+  // 3. 纯粹的模糊请求（只有动词没有对象，且不是工单相关）
+  const isTicketRelated = ['工单', '申请', '办理', '开具', '证明', '提单'].some(kw => text.includes(kw))
+  if (!isTicketRelated) {
+    const vagueRequests = ["怎么办", "怎么弄", "怎么做"]
+    if (vagueRequests.some(req => text === req || text === req + '?')) return true
+  }
 
-  // 4. 疑问词开头但没有具体内容
-  const questionStarters = ["怎么", "如何", "什么", "为什么", "多少", "几天", "能不能", "可不可以"]
-  if (questionStarters.some(starter => text.startsWith(starter)) && text.length < 8) return true
+  // 4. 纯粹的代词请求
+  if (["帮我", "告诉我", "解释一下", "说一下"].some(req => text === req || text === req + '?')) return true
 
   // 5. 年假查询但没有提供工龄信息
   if (text.includes('年假') && ['几天', '多少天'].some(kw => text.includes(kw))) {
