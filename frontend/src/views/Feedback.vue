@@ -10,7 +10,10 @@
         <template #default="{ row }"><el-tag :type="row.feedback_type === 'useful' ? 'success' : 'danger'" size="small">{{ row.feedback_type === 'useful' ? '有用' : '无用' }}</el-tag></template>
       </el-table-column>
       <el-table-column prop="correction_text" label="纠错内容" min-width="200" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.correction_text || '仅评价为无用，未填写纠错说明' }}</template>
+        <template #default="{ row }">
+          <span v-if="row.feedback_type === 'useful'">—</span>
+          <span v-else>{{ row.correction_text || '仅评价为无用，未填写纠错说明' }}</span>
+        </template>
       </el-table-column>
       <el-table-column prop="user_name" label="反馈人" width="100" />
       <el-table-column prop="status" label="状态" width="100">
@@ -34,7 +37,10 @@
         <h4 style="margin: 12px 0 8px">原回答</h4>
         <p style="color: #374151; background: #f9fafb; padding: 12px; border-radius: 8px; white-space: pre-wrap">{{ currentFeedback.answer || '—' }}</p>
         <h4 style="margin: 12px 0 8px">纠错说明</h4>
-        <p style="color: #374151; background: #f9fafb; padding: 12px; border-radius: 8px">{{ currentFeedback.correction_text || '仅评价为无用，未填写纠错说明' }}</p>
+        <p style="color: #374151; background: #f9fafb; padding: 12px; border-radius: 8px">
+          <span v-if="currentFeedback.feedback_type === 'useful'">—</span>
+          <span v-else>{{ currentFeedback.correction_text || '仅评价为无用，未填写纠错说明' }}</span>
+        </p>
       </div>
       <el-form :model="handleForm" label-width="80px">
         <el-form-item label="处理状态">
