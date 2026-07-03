@@ -19,6 +19,7 @@ from app.services.conversation_state_service import ConversationStateService
 from app.services.slot_extractor import extract_slots_for_intent
 from app.services.ticket_intent_service import detect_ticket_intent, TICKET_SLOT_CONFIG
 from app.services.ticket_slot_extractor import extract_ticket_slots
+from app.services.followup_service import is_followup_question, get_recent_context, rewrite_followup_question
 
 router = APIRouter()
 
@@ -510,9 +511,43 @@ def _build_ticket_confirm(question: str, conv_id: str, user_id: int, db: Session
     })
 
 
-def handle_ticket_confirm(question: str, state, user_id: int, db: Session) -> dict:
+def _answer_ticket_question(question: str, ticket_type: str, config: dict, filled: dict) -> str:
+    """
+    回复工单确认阶段的用户问题
+    """
+    q = question.strip()
+    q_lower = q.lower()
+
+    # 办理时间相关
+    if any(kw in q for kw in ['多久', '时间', '几天', '多长时间', '办理时间']):
+        return "一般由 HR 根据实际工作量处理，通常建议预留 1-3 个工作日。\n\n当前工单尚未提交，如信息无误请点击「确认提交」；如需修改请点击「继续修改」。"
+
+    # 进度查询
+    if any(kw in q for kw in ['进度', '查看', '怎么查', '在哪看']):
+        return "工单提交后，你可以在「我的 - 人工请求」中查看处理进度。\n\n当前工单尚未提交，如信息无误请点击「确认提交」。"
+
+    # 修改相关
+    if any(kw in q for kw in ['修改', '改', '变更', '更正']):
+        return "如需修改工单信息，请点击「继续修改」按钮，然后告诉我需要修改的内容。\n\n当前工单尚未提交。"
+
+    # 材料相关
+    if any(kw in q for kw in ['材料', '资料', '文件', '需要什么']):
+        return "具体所需材料请以 HR 部门要求为准。如有疑问，可在提交后联系 HR 确认。\n\n当前工单尚未提交，如信息无误请点击「确认提交」。"
+
+    # 通知相关
+    if any(kw in q for kw in ['通知', '告知', '提醒', '会通知']):
+        return "工单提交后，HR 会收到通知并尽快处理。处理完成后系统会通知你。\n\n当前工单尚未提交，如信息无误请点击「确认提交」。"
+
+    # 通用回答
+    return "当前工单尚未提交，如信息无误请点击「确认提交」；如需修改请点击「继续修改」。如有其他问题，请先提交工单后联系 HR 咨询。"
+
+
+def handle_ticket_confirm(question: str, state, user_id: int, db: Session, action: str = None) -> dict:
     """
     处理工单确认提交
+
+    只有明确的确认词或 action=confirm_submit 才会提交工单
+    其他问题会回答但保持 waiting_for_confirm 状态
     """
     state_service = ConversationStateService(db)
     conv_id = state.conversation_id
@@ -526,6 +561,72 @@ def handle_ticket_confirm(question: str, state, user_id: int, db: Session) -> di
     ticket_type = filled.get("ticket_type", "other")
     config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
 
+    # 严格的确认词列表
+    strict_confirm_words = [
+        '确认', '确认提交', '提交', '提交吧', '可以提交',
+        '没问题', '是的', '确认无误', '好的', '可以', '行'
+    ]
+
+    # 检查是否是真正的确认操作
+    is_confirm = False
+    if action == "confirm_submit":
+        is_confirm = True
+    elif question.strip() in strict_confirm_words:
+        is_confirm = True
+    elif question.strip().lower() in ['ok', 'yes', 'confirm']:
+        is_confirm = True
+
+    # 如果不是确认操作，回答用户问题但保持状态
+    if not is_confirm:
+        # 根据用户问题生成回答
+        answer = _answer_ticket_question(question, ticket_type, config, filled)
+
+        # 保存问答记录
+        record = QARecord(
+            user_id=user_id,
+            question=question,
+            answer=answer,
+            answer_type="ticket_confirm",
+            source_docs=json.dumps([]),
+            conversation_id=conv_id
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+
+        # 构建 ticket_draft
+        desc_parts = []
+        for slot in config["required_slots"]:
+            label = config["slot_labels"].get(slot, slot)
+            value = filled.get(slot, "")
+            if slot == "need_stamp":
+                value = "是" if value else "否"
+            if value:
+                desc_parts.append(f"{label}：{value}")
+
+        return success({
+            "answer": answer,
+            "answer_type": "ticket_confirm",
+            "intent": "ticket_create",
+            "ticket_type": ticket_type,
+            "source_docs": [],
+            "record_id": record.id,
+            "conversation_id": conv_id,
+            "required_slots": [],
+            "filled_slots": filled,
+            "ticket_draft": {
+                "type": ticket_type,
+                "title": config["title"],
+                "description": "\n".join(desc_parts),
+                "fields": {k: v for k, v in filled.items() if k not in ["ticket_type", "title", "display_type"]}
+            },
+            "actions": [
+                {"type": "confirm_submit", "label": "确认提交"},
+                {"type": "modify", "label": "继续修改"}
+            ]
+        })
+
+    # 以下是确认提交的逻辑
     # 构建工单描述
     desc_parts = []
     for slot in config["required_slots"]:
@@ -755,7 +856,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     if state.pending_intent:
         # 工单待确认状态
         if state.pending_intent == "ticket_create" and state.status == "waiting_for_confirm":
-            result = handle_ticket_confirm(question, state, current_user.id, db)
+            result = handle_ticket_confirm(question, state, current_user.id, db, data.action)
             if result:
                 return result
 
@@ -774,7 +875,50 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
         # 其他未知的 pending_intent，清空并走正常流程
         state_service.clear_pending_intent(current_user.id, conv_id)
 
-    # Step 5: 【第二优先级】判断是否是工单意图
+    # Step 5: 【新增】上下文追问处理
+    resolved_question = question
+    is_followup = False
+    followup_context = {}
+
+    if is_followup_question(question):
+        recent_context = get_recent_context(current_user.id, conv_id, db)
+        if recent_context.get("last_topic"):
+            followup_result = rewrite_followup_question(question, recent_context)
+            if followup_result.get("is_followup"):
+                is_followup = True
+                followup_context = followup_result
+
+                # 如果需要澄清
+                if followup_result.get("need_clarification"):
+                    answer = followup_result.get("clarification_message", "请补充更完整的问题。")
+                    record = QARecord(
+                        user_id=current_user.id,
+                        question=question,
+                        answer=answer,
+                        answer_type="clarification",
+                        source_docs=json.dumps([]),
+                        conversation_id=conv_id
+                    )
+                    db.add(record)
+                    db.commit()
+                    db.refresh(record)
+                    return success({
+                        "answer": answer,
+                        "answer_type": "clarification",
+                        "intent": "followup_clarification",
+                        "source_docs": [],
+                        "record_id": record.id,
+                        "conversation_id": conv_id,
+                        "required_slots": [],
+                        "filled_slots": {},
+                        "actions": []
+                    })
+
+                # 使用改写后的问题
+                if followup_result.get("resolved_question"):
+                    resolved_question = followup_result["resolved_question"]
+
+    # Step 6: 【第二优先级】判断是否是工单意图
     ticket_result = handle_ticket_create(question, conv_id, current_user.id, db)
     if ticket_result:
         return ticket_result
@@ -890,17 +1034,49 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             return handle_annual_leave_clarification(question, conv_id, current_user.id, db)
 
     # Step 8: 【原有逻辑】关键词匹配FAQ
+    # 使用 resolved_question 进行匹配（如果是 follow-up 问题）
     context = get_conversation_context(db, current_user.id, conv_id)
 
-    faq = match_faq(db, question)
+    faq = match_faq(db, resolved_question)
+
+    # follow-up 问题的主题验证：确保匹配的 FAQ 与上下文主题一致
+    if faq and is_followup and followup_context.get("inherited_topic"):
+        topic = followup_context["inherited_topic"]
+        faq_text = (faq.question + " " + (faq.answer or "")).lower()
+
+        # 主题关键词验证
+        topic_keywords = {
+            "annual_leave": ["年假", "工龄", "年休假", "带薪"],
+            "leave_application": ["请假", "病假", "事假", "假期", "休假"],
+            "attendance": ["考勤", "打卡", "迟到", "加班"],
+            "salary": ["工资", "薪资", "社保", "报销"],
+        }
+
+        expected_keywords = topic_keywords.get(topic, [])
+        if expected_keywords and not any(kw in faq_text for kw in expected_keywords):
+            # FAQ 与主题不匹配，不使用这个 FAQ
+            faq = None
+
     if faq:
-        answer = f"我理解您的问题是关于「{faq.question}」。\n\n"
+        # 如果是 follow-up，在回答中说明上下文
+        if is_followup and followup_context.get("inherited_topic"):
+            topic_names = {
+                "annual_leave": "年假",
+                "leave_application": "请假",
+                "attendance": "考勤",
+                "salary": "薪酬"
+            }
+            topic_name = topic_names.get(followup_context["inherited_topic"], "")
+            answer = f"结合您之前关于{topic_name}的问题，"
+            answer += f"我理解您的问题是关于「{faq.question}」。\n\n"
+        else:
+            answer = f"我理解您的问题是关于「{faq.question}」。\n\n"
         answer += f"根据标准答案库查询，找到以下相关信息：\n\n"
         answer += f"**问题：** {faq.question}\n\n"
         answer += f"**答案：** {faq.answer}"
         record = QARecord(
             user_id=current_user.id,
-            question=question,
+            question=question,  # 保存原始问题
             answer=answer,
             answer_type="faq",
             source_docs=json.dumps([{"faq_id": faq.id, "question": faq.question}]),
@@ -920,8 +1096,27 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "actions": []
         })
 
-    # Step 9: 【原有逻辑】关键词匹配规则
-    rule = match_rule(db, question)
+    # Step 10: 【原有逻辑】关键词匹配规则
+    rule = match_rule(db, resolved_question)
+
+    # follow-up 问题的主题验证：确保匹配的规则与上下文主题一致
+    if rule and is_followup and followup_context.get("inherited_topic"):
+        topic = followup_context["inherited_topic"]
+        rule_text = (rule.name + " " + (rule.trigger_keywords or "") + " " + (rule.answer_template or "")).lower()
+
+        # 主题关键词验证
+        topic_keywords = {
+            "annual_leave": ["年假", "工龄", "年休假", "带薪"],
+            "leave_application": ["请假", "病假", "事假", "假期", "休假"],
+            "attendance": ["考勤", "打卡", "迟到", "加班"],
+            "salary": ["工资", "薪资", "社保", "报销"],
+        }
+
+        expected_keywords = topic_keywords.get(topic, [])
+        if expected_keywords and not any(kw in rule_text for kw in expected_keywords):
+            # 规则与主题不匹配，不使用这个规则
+            rule = None
+
     if rule:
         answer = f"我理解您的问题，根据公司相关规则查询：\n\n"
         answer += f"**规则名称：** {rule.name}\n\n"
@@ -948,8 +1143,9 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "actions": []
         })
 
-    # Step 10: 【原有逻辑】RAG搜索 + AI生成
-    answer, sources, confidence = rag_search_and_generate(question, context)
+    # Step 11: 【原有逻辑】RAG搜索 + AI生成
+    # 使用 resolved_question 进行搜索（如果是 follow-up 问题）
+    answer, sources, confidence = rag_search_and_generate(resolved_question, context)
 
     if confidence == "need_clarification":
         record = QARecord(
@@ -1006,7 +1202,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "miss_id": miss.id
         })
 
-    # Step 11: 【原有逻辑】高置信度回答
+    # Step 12: 【原有逻辑】高置信度回答
     record = QARecord(
         user_id=current_user.id,
         question=question,
