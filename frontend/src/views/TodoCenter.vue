@@ -169,6 +169,7 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getTickets, updateTicket, getTicketStats } from '../api/tickets'
+import { ticketTypeLabel, ticketStatusLabel, ticketStatusType } from '../utils/ticketLabels'
 import { getFeedbacks, handleFeedback } from '../api/feedback'
 import { getGaps, resolveGap as resolveGapApi } from '../api/gaps'
 
@@ -204,10 +205,7 @@ const gapPage = ref(1)
 const gapTotal = ref(0)
 const unresolvedGaps = ref(0)
 
-// 工单相关函数
-function ticketTypeLabel(t) { return { certify: '证明开具', info_change: '信息变更', other: '其他' }[t] || t }
-function ticketStatusType(s) { return { pending: 'warning', processing: 'primary', completed: 'success', rejected: 'danger' }[s] || '' }
-function ticketStatusLabel(s) { return { pending: '待处理', processing: '处理中', completed: '已完成', rejected: '已驳回' }[s] || s }
+// 工单相关函数（ticketTypeLabel 等见 utils/ticketLabels.js）
 
 async function fetchTickets() {
   ticketLoading.value = true

@@ -20,6 +20,10 @@ python init_db.py
 
 # 4. 启动服务
 uvicorn app.main:app --reload --port 8000
+
+# 5. 智能问答自动化测试（另开终端，服务已启动后）
+python run_chat_tests.py
+# 详见 TEST_CASES_CHAT.md
 ```
 
 ## 访问地址

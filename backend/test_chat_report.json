@@ -1,0 +1,1100 @@
+{
+  "timestamp": "2026-07-03T15:50:40",
+  "server": {
+    "reachable": true,
+    "message": "ok"
+  },
+  "summary": {
+    "unit_total": 0,
+    "unit_passed": 0,
+    "unit_failed": 0,
+    "api_total": 30,
+    "api_passed": 23,
+    "api_failed": 7,
+    "all_passed": false
+  },
+  "unit_tests": [],
+  "api_tests": [
+    {
+      "case_id": "Q-01",
+      "module": "FAQ",
+      "kind": "single",
+      "passed": true,
+      "description": "按工龄 1–10 年 5 天、10–20 年 10 天、20 年以上 15 天",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "年假怎么计算？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "faq"
+          ],
+          "actual_type": "faq",
+          "must_contain": [
+            "5天",
+            "工龄"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "您的年假根据累计工龄计算，具体如下：  *   **1年以上不满10年**：5天 *   **10年以上不满20年**：10天   *   **20年以上**：15天  请注意，当年未休完的年假可在次年3月31日前申请补休，逾期将自动清零。",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-02",
+      "module": "FAQ",
+      "kind": "single",
+      "passed": true,
+      "description": "分级审批；年假提前 3 个工作日",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "请假需要提前多久申请？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "faq"
+          ],
+          "actual_type": "faq",
+          "must_contain": [
+            "OA",
+            "审批"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "请假需提前通过OA系统提交： - 年假：提前 **3个工作日** - 其他假期：提前 **1个工作日**  审批流程为： - 1天内：直属上级 - 1-3天：部门负责人 - 3天以上：HR  紧急情况可先电话请假，事后补办手续。",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-03",
+      "module": "FAQ",
+      "kind": "single",
+      "passed": true,
+      "description": "工作日 1.5 倍/调休，周末 2 倍，法定 3 倍",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "加班可以调休吗？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "faq"
+          ],
+          "actual_type": "faq",
+          "must_contain": [
+            "调休",
+            "1.5"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "**可以。** 加班可以选择调休或加班费，具体规则如下：  - **工作日加班**：可选择调休，或按 **1.5倍** 标准支付加班费。 - **周末加班**：可选择调休，或按 **2倍** 标准支付加班费。 - **法定节假日加班**：按",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-04",
+      "module": "FAQ",
+      "kind": "single",
+      "passed": false,
+      "description": "试用期 3 个月，工资为转正 80%",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "试用期多久？",
+          "action": null,
+          "passed": false,
+          "expected_types": [
+            "faq"
+          ],
+          "actual_type": "faq",
+          "must_contain": [
+            "3个月",
+            "80%"
+          ],
+          "missing_keywords": [
+            "80%"
+          ],
+          "answer_preview": "试用期为**3个月**，自入职之日起计算。",
+          "error": "缺少关键词: ['80%']"
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-05",
+      "module": "FAQ",
+      "kind": "single",
+      "passed": true,
+      "description": "5 步报销流程，30 天内提交",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "报销流程是什么？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "faq"
+          ],
+          "actual_type": "faq",
+          "must_contain": [
+            "报销",
+            "发票"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "报销流程如下：  1. **填写报销申请单**，并附上原始发票。 2. **部门负责人审批**（报销金额在1000元以内）。 3. **财务部审核**。 4. **总经理审批**（报销金额超过5000元时）。 5. **财务部付款**。  ",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-06",
+      "module": "FAQ",
+      "kind": "single",
+      "passed": true,
+      "description": "结果公布后 5 个工作日内提出，HR 10 工作日反馈",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "绩效申诉怎么提交？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "faq"
+          ],
+          "actual_type": "faq",
+          "must_contain": [
+            "申诉",
+            "5个工作日"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "绩效申诉请按以下流程提交：  1.  **在考核结果公布后5个工作日内**，首先向你的**直属上级**提出申诉。 2.  如对上级的处理结果不满，可向**HR部门提交书面申诉**。 3.  HR部门会在收到申诉后的**10个工作日内**完成",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-07",
+      "module": "规则",
+      "kind": "single",
+      "passed": true,
+      "description": "HR 联系方式规则命中",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "HR电话是多少？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rule"
+          ],
+          "actual_type": "rule",
+          "must_contain": [
+            "88888888"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "HR部门电话是 **010-88888888**。   如有紧急事务，可拨打直线 **13800138000**。",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-08",
+      "module": "规则",
+      "kind": "single",
+      "passed": true,
+      "description": "标准工时 9:00–12:00，13:30–18:00",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "公司几点上班？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rule"
+          ],
+          "actual_type": "rule",
+          "must_contain": [
+            "9:00",
+            "18:00"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "公司上班时间为**上午9:00**。    工作时间安排如下：   - **上午**：9:00 - 12:00   - **午休**：12:00 - 13:30   - **下午**：13:30 - 18:00   - **周末休息**（周",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-09",
+      "module": "规则",
+      "kind": "single",
+      "passed": true,
+      "description": "当日补卡，每月不超过 3 次",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "忘记打卡怎么办？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rule",
+            "faq"
+          ],
+          "actual_type": "rule",
+          "must_contain": [
+            "补卡"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "忘记打卡后，请立即采取以下步骤：  1. **当日内提交**：通过考勤系统提交补卡申请。 2. **上级审批**：经直属上级审批后生效。 3. **次数限制**：每月补卡不超过3次；超过3次需HR审批。 4. **注意**：未打卡且未补卡视",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-10",
+      "module": "规则",
+      "kind": "single",
+      "passed": false,
+      "description": "30 分钟内扣绩效分，超 30 分钟按旷工处理",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "迟到怎么处理？",
+          "action": null,
+          "passed": false,
+          "expected_types": [
+            "rule"
+          ],
+          "actual_type": "rag",
+          "must_contain": [
+            "绩效",
+            "旷工"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "根据制度文档，迟到处理如下：  - 迟到30分钟以内：每次扣减当月绩效分1分。 - 迟到30分钟以上1小时以内：按旷工半天处理。 - 迟到1小时以上：按旷工1天处理。 - 每月累计迟到3次及以上：给予书面警告。  如需了解其他细节，请查阅相",
+          "error": "类型期望 ['规则答案']，实际 已查阅制度文档(rag)"
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-11",
+      "module": "RAG",
+      "kind": "single",
+      "passed": true,
+      "description": "婚假 3 天，领证后 6 个月内使用",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "婚假有几天？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rag",
+            "faq"
+          ],
+          "actual_type": "rag",
+          "must_contain": [
+            "3"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "根据制度文档，员工依法登记结婚可享受婚假3天。婚假须在领证后6个月内使用完毕。",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-12",
+      "module": "RAG",
+      "kind": "single",
+      "passed": true,
+      "description": "产假 98 天，难产/多胞胎有追加",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "产假多少天？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rag"
+          ],
+          "actual_type": "rag",
+          "must_contain": [
+            "98"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "根据制度文档，女员工生育享受产假98天，其中产前可休假15天。",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-13",
+      "module": "RAG",
+      "kind": "single",
+      "passed": true,
+      "description": "每月 15 日发放上月工资",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "每月几号发工资？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rag"
+          ],
+          "actual_type": "rag",
+          "must_contain": [
+            "15"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "根据公司制度，工资每月15日发放上月工资，遇节假日提前发放。",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-14",
+      "module": "RAG",
+      "kind": "single",
+      "passed": false,
+      "description": "A/B/C/D/E 五档",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "绩效等级分几档？",
+          "action": null,
+          "passed": false,
+          "expected_types": [
+            "rag"
+          ],
+          "actual_type": "faq",
+          "must_contain": [
+            "优秀",
+            "合格"
+          ],
+          "missing_keywords": [
+            "优秀",
+            "合格"
+          ],
+          "answer_preview": "根据现有知识库，暂未提供关于绩效等级划分的具体信息。建议您咨询公司HR部门或您的直属上级以获取准确信息。",
+          "error": "类型期望 ['已查阅制度文档']，实际 标准答案(faq); 缺少关键词: ['优秀', '合格']"
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-15",
+      "module": "RAG",
+      "kind": "single",
+      "passed": true,
+      "description": "身份证、学历证书、离职证明等",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "新员工入职要带什么材料？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rag"
+          ],
+          "actual_type": "rag",
+          "must_contain": [
+            "身份证",
+            "学历"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "根据文档，新员工入职当天需提交以下材料： 1. 身份证原件及复印件； 2. 学历证书原件及复印件； 3. 离职证明； 4. 近期一寸照片2张； 5. 银行卡信息； 6. 体检报告。",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-16",
+      "module": "RAG",
+      "kind": "single",
+      "passed": true,
+      "description": "直系亲属丧假 3 天",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "丧假可以请几天？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rag"
+          ],
+          "actual_type": "rag",
+          "must_contain": [
+            "3"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "根据制度文档： 1.  **直系亲属去世**：可享受丧假**3天**（第十三条）。 2.  **岳父母或公婆去世**：可享受丧假**1-3天**（第十四条）。",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-17",
+      "module": "负向",
+      "kind": "single",
+      "passed": false,
+      "description": "种子数据无此内容，应提示未找到依据",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "公司食堂几点开饭？",
+          "action": null,
+          "passed": false,
+          "expected_types": [
+            "miss",
+            "clarification"
+          ],
+          "actual_type": "rule",
+          "must_contain": [
+            "暂未",
+            "知识库"
+          ],
+          "missing_keywords": [
+            "暂未",
+            "知识库"
+          ],
+          "answer_preview": "公司食堂开饭时间未在提供的工作时间规则中说明。当前知识仅涵盖工作时间安排，建议您咨询行政部门或查看内部通知获取准确信息。",
+          "error": "类型期望 ['未找到明确依据', '需要补充信息']，实际 规则答案(rule); 缺少关键词: ['暂未', '知识库']"
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-18",
+      "module": "负向",
+      "kind": "single",
+      "passed": true,
+      "description": "无关问题，不应编造答案",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "火星移民政策是什么？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "miss",
+            "clarification"
+          ],
+          "actual_type": "miss",
+          "must_contain": [
+            "暂未",
+            "知识库"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "抱歉，关于「火星移民政策是什么？」，当前知识库暂未找到明确依据。  建议您： 1. 换个关键词重新提问 2. 联系HR部门获取帮助 3. 提交工单进行详细咨询",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-19",
+      "module": "FAQ变体",
+      "kind": "single",
+      "passed": true,
+      "description": "换说法仍应命中报销 FAQ",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "报销要哪些步骤？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "faq"
+          ],
+          "actual_type": "faq",
+          "must_contain": [
+            "报销"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "报销步骤如下：  1. 填写报销申请单并附上原始发票。 2. 提交部门负责人审批（1000元以内）。 3. 财务部审核。 4. 总经理审批（5000元以上）。 5. 财务部付款。  注意：报销须在费用发生后**30天内**提交，逾期不予报销",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "Q-20",
+      "module": "RAG",
+      "kind": "single",
+      "passed": true,
+      "description": "周末加班 2 倍或调休（FAQ/RAG 均可）",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "周末加班怎么算加班费？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rag",
+            "faq"
+          ],
+          "actual_type": "faq",
+          "must_contain": [
+            "2倍|2 倍|两倍|调休"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "周末加班的加班费按本人日工资标准的 **2倍** 计算。  您可以选择调休或加班费。",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "T-01",
+      "module": "工单-在职证明",
+      "kind": "multi",
+      "passed": true,
+      "description": "完整提交在职证明工单",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "我要开一份在职证明",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_clarification",
+          "must_contain": [
+            "用途",
+            "证明"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "好的，我来帮您提交「证明开具」申请。  还需要补充以下信息： 1. 证明用途 2. 接收单位 3. 是否需要盖章 4. 期望完成时间  示例：「用来办签证，交给日本领事馆，要盖章，最好这周五前完成」 如想先问其它问题，可直接提问；回复「取消",
+          "error": null
+        },
+        {
+          "step_index": 2,
+          "question": "用来办签证，交给日本领事馆，要盖章，最好这周五前",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_confirm",
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_confirm",
+          "must_contain": [
+            "日本",
+            "签证"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "请确认以下工单信息：  **工单类型：** 证明开具 **证明用途：** 办签证 **接收单位：** 日本 **是否需要盖章：** 是 **期望完成时间：** 这周五前  确认提交给 HR 吗？",
+          "error": null
+        },
+        {
+          "step_index": 3,
+          "question": "确认提交",
+          "action": "confirm_submit",
+          "passed": true,
+          "expected_types": [
+            "ticket_submitted"
+          ],
+          "actual_type": "ticket_submitted",
+          "must_contain": [
+            "提交",
+            "TK"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "已提交人工请求，工单编号：**TK202607030023**。  你可以在「我的 - 人工请求」中查看处理进度。",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "T-02",
+      "module": "工单-考勤异常",
+      "kind": "multi",
+      "passed": true,
+      "description": "考勤异常说明提交",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "我要提交考勤异常说明",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_clarification",
+          "must_contain": [
+            "异常",
+            "日期"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "好的，我来帮您提交「考勤异常」申请。  还需要补充以下信息： 1. 异常日期 2. 异常类型 3. 异常原因  示例：「2026年7月3日, 打卡缺失, 忘记打卡」 （日期、异常类型、原因 — AI 会自动整理） 也可点击下方「手动填写」按",
+          "error": null
+        },
+        {
+          "step_index": 2,
+          "question": "2026年7月3日, 打卡缺失, 忘记打卡",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_confirm",
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_confirm",
+          "must_contain": [
+            "2026",
+            "打卡"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "请确认以下工单信息：  **工单类型：** 考勤异常 **异常日期：** 2026年7月3日 **异常类型：** 打卡缺失 **异常原因：** 忘记打卡  确认提交给 HR 吗？",
+          "error": null
+        },
+        {
+          "step_index": 3,
+          "question": "确认提交",
+          "action": "confirm_submit",
+          "passed": true,
+          "expected_types": [
+            "ticket_submitted"
+          ],
+          "actual_type": "ticket_submitted",
+          "must_contain": [
+            "提交",
+            "TK"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "已提交人工请求，工单编号：**TK202607030024**。  你可以在「我的 - 人工请求」中查看处理进度。",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "T-03",
+      "module": "工单-修改字段",
+      "kind": "multi",
+      "passed": true,
+      "description": "确认前修改接收单位",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "我要开在职证明",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_clarification",
+          "must_contain": [
+            "用途"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "好的，我来帮您提交「证明开具」申请。  还需要补充以下信息： 1. 证明用途 2. 接收单位 3. 是否需要盖章 4. 期望完成时间  示例：「用来办签证，交给日本领事馆，要盖章，最好这周五前完成」 如想先问其它问题，可直接提问；回复「取消",
+          "error": null
+        },
+        {
+          "step_index": 2,
+          "question": "用来办签证，交给日本领事馆，要盖章，最好这周五前",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_confirm",
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_confirm",
+          "must_contain": [
+            "日本"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "请确认以下工单信息：  **工单类型：** 证明开具 **证明用途：** 办签证 **接收单位：** 日本 **是否需要盖章：** 是 **期望完成时间：** 这周五前  确认提交给 HR 吗？",
+          "error": null
+        },
+        {
+          "step_index": 3,
+          "question": "接收单位改成美国大使馆",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_confirm",
+            "ticket_clarification",
+            "ticket_qa"
+          ],
+          "actual_type": "ticket_confirm",
+          "must_contain": [
+            "美国"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "请确认以下工单信息：  **工单类型：** 证明开具 **证明用途：** 办签证 **接收单位：** 美国大使馆 **是否需要盖章：** 是 **期望完成时间：** 这周五前  确认提交给 HR 吗？",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "T-04",
+      "module": "工单-类型选择",
+      "kind": "multi",
+      "passed": true,
+      "description": "未指明类型时选择在职证明",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "提交一个新工单",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_clarification",
+          "must_contain": [
+            "证明",
+            "工单"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "好的，请问您要申请哪类工单？  1. **在职证明 / 工作证明 / 收入证明** 2. **个人信息变更**（手机号、邮箱等） 3. **考勤异常说明**（忘记打卡、补卡等） 4. **其他 HR 人工请求**  请直接说明，例如「我想再",
+          "error": null
+        },
+        {
+          "step_index": 2,
+          "question": "1",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_clarification",
+          "must_contain": [
+            "用途",
+            "证明"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "好的，我来帮您提交「证明开具」申请。  还需要补充以下信息： 1. 证明用途 2. 接收单位 3. 是否需要盖章 4. 期望完成时间  示例：「用来办签证，交给日本领事馆，要盖章，最好这周五前完成」 如想先问其它问题，可直接提问；回复「取消",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "T-05",
+      "module": "工单-问答切换",
+      "kind": "multi",
+      "passed": true,
+      "description": "工单流程中询问 HR 电话后回到工单",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "我要开一份在职证明",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_clarification",
+          "must_contain": [
+            "用途"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "好的，我来帮您提交「证明开具」申请。  还需要补充以下信息： 1. 证明用途 2. 接收单位 3. 是否需要盖章 4. 期望完成时间  示例：「用来办签证，交给日本领事馆，要盖章，最好这周五前完成」 如想先问其它问题，可直接提问；回复「取消",
+          "error": null
+        },
+        {
+          "step_index": 2,
+          "question": "HR电话是多少？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rule",
+            "faq"
+          ],
+          "actual_type": "rule",
+          "must_contain": [
+            "88888888"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "好的，已暂停「证明开具」申请。如需继续，可回复「继续修改」或「确认提交」。  HR部门的联系电话是： - **普通事务**：010-88888888 - **紧急事务**：13800138000（HR直线）",
+          "error": null
+        },
+        {
+          "step_index": 3,
+          "question": "继续修改",
+          "action": "modify",
+          "passed": true,
+          "expected_types": [
+            "ticket_clarification",
+            "ticket_confirm",
+            "ticket_qa"
+          ],
+          "actual_type": "ticket_clarification",
+          "must_contain": [
+            "修改",
+            "证明"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "好的，已进入修改模式。当前工单信息如下：  - **证明用途**：未填写 - **接收单位**：未填写 - **是否需要盖章**：未填写 - **期望完成时间**：未填写  请直接说明要修改的内容，例如： - 「接收单位改成日本领事馆」 -",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "T-06",
+      "module": "工单-提交后追问",
+      "kind": "multi",
+      "passed": false,
+      "description": "提交后询问处理时长",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "我要开一份在职证明",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_clarification",
+          "must_contain": [
+            "用途"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "好的，我来帮您提交「证明开具」申请。  还需要补充以下信息： 1. 证明用途 2. 接收单位 3. 是否需要盖章 4. 期望完成时间  示例：「用来办签证，交给日本领事馆，要盖章，最好这周五前完成」 如想先问其它问题，可直接提问；回复「取消",
+          "error": null
+        },
+        {
+          "step_index": 2,
+          "question": "用来办签证，交给日本领事馆，要盖章，最好这周五前",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_confirm",
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_confirm",
+          "must_contain": [
+            "日本"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "请确认以下工单信息：  **工单类型：** 证明开具 **证明用途：** 办签证 **接收单位：** 日本 **是否需要盖章：** 是 **期望完成时间：** 这周五前  确认提交给 HR 吗？",
+          "error": null
+        },
+        {
+          "step_index": 3,
+          "question": "确认提交",
+          "action": "confirm_submit",
+          "passed": true,
+          "expected_types": [
+            "ticket_submitted"
+          ],
+          "actual_type": "ticket_submitted",
+          "must_contain": [
+            "提交"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "已提交人工请求，工单编号：**TK202607030025**。  你可以在「我的 - 人工请求」中查看处理进度。",
+          "error": null
+        },
+        {
+          "step_index": 4,
+          "question": "这个大概要等几天？",
+          "action": null,
+          "passed": false,
+          "expected_types": [
+            "ticket_qa",
+            "ticket_clarification"
+          ],
+          "actual_type": "clarification",
+          "must_contain": [
+            "工作日",
+            "天"
+          ],
+          "missing_keywords": [
+            "工作日"
+          ],
+          "answer_preview": "你这个问题需要结合上下文才能准确回答。  请补充你想了解的具体内容，例如： 1. 年假天数或工龄福利 2. 考勤、迟到、补卡相关规定 3. 请假、试用期或其他制度",
+          "error": "类型期望 ['工单咨询', '工单申请']，实际 需要补充信息(clarification); 缺少关键词: ['工作日']"
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "T-07",
+      "module": "工单-信息变更",
+      "kind": "multi",
+      "passed": false,
+      "description": "修改手机号工单（首轮识别）",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "我想修改手机号",
+          "action": null,
+          "passed": false,
+          "expected_types": [
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_clarification",
+          "must_contain": [
+            "手机",
+            "变更"
+          ],
+          "missing_keywords": [
+            "手机"
+          ],
+          "answer_preview": "好的，我来帮您提交「信息变更」申请。  还需要补充以下信息： 1. 原信息 2. 新信息 3. 变更原因  如想先问其它问题，可直接提问；也可点击「手动填写」按钮；回复「取消」可放弃本次申请。",
+          "error": "缺少关键词: ['手机']"
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "T-08",
+      "module": "工单-校验",
+      "kind": "multi",
+      "passed": false,
+      "description": "填完槽位后询问信息是否正确",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "我要开一份在职证明",
+          "action": null,
+          "passed": false,
+          "expected_types": [
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_clarification",
+          "must_contain": [
+            "用途"
+          ],
+          "missing_keywords": [
+            "用途"
+          ],
+          "answer_preview": "好的，我来帮您提交「证明开具」申请。  还需要补充以下信息： 1. 接收单位 2. 是否需要盖章 3. 期望完成时间  示例：「用来办签证，交给日本领事馆，要盖章，最好这周五前完成」 如想先问其它问题，可直接提问；回复「取消」可放弃本次申请",
+          "error": "缺少关键词: ['用途']"
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "T-09",
+      "module": "工单-考勤修改",
+      "kind": "multi",
+      "passed": true,
+      "description": "考勤异常确认前修改原因",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "我要提交考勤异常说明",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_clarification",
+          "must_contain": [
+            "异常"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "好的，我来帮您提交「考勤异常」申请。  还需要补充以下信息： 1. 异常日期 2. 异常类型 3. 异常原因  示例：「2026年7月3日, 打卡缺失, 忘记打卡」 （日期、异常类型、原因 — AI 会自动整理） 也可点击下方「手动填写」按",
+          "error": null
+        },
+        {
+          "step_index": 2,
+          "question": "2026年7月3日, 打卡缺失, 忘记打卡",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_confirm",
+            "ticket_clarification"
+          ],
+          "actual_type": "ticket_confirm",
+          "must_contain": [
+            "2026"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "请确认以下工单信息：  **工单类型：** 考勤异常 **异常日期：** 2026年7月3日 **异常类型：** 打卡缺失 **异常原因：** 忘记打卡  确认提交给 HR 吗？",
+          "error": null
+        },
+        {
+          "step_index": 3,
+          "question": "异常原因改成: 路上堵车",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "ticket_confirm",
+            "ticket_clarification",
+            "ticket_qa"
+          ],
+          "actual_type": "ticket_confirm",
+          "must_contain": [
+            "堵车"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "请确认以下工单信息：  **工单类型：** 考勤异常 **异常日期：** 2026年7月3日 **异常类型：** 打卡缺失 **异常原因：** 路上堵车  确认提交给 HR 吗？",
+          "error": null
+        }
+      ],
+      "error": null
+    },
+    {
+      "case_id": "T-10",
+      "module": "追问",
+      "kind": "multi",
+      "passed": true,
+      "description": "规则回答后的考勤追问",
+      "steps": [
+        {
+          "step_index": 1,
+          "question": "忘记打卡怎么办？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rule",
+            "faq"
+          ],
+          "actual_type": "rule",
+          "must_contain": [
+            "补卡"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "如果忘记打卡，可以当天通过考勤系统提交补卡申请，经直属上级审批后即生效。   每月补卡次数建议不超过3次，超过3次需额外提交HR审批。   未补卡且未打卡的情况将被视为旷工，请记得及时处理哦！",
+          "error": null
+        },
+        {
+          "step_index": 2,
+          "question": "那迟到呢？",
+          "action": null,
+          "passed": true,
+          "expected_types": [
+            "rule",
+            "faq",
+            "rag",
+            "clarification"
+          ],
+          "actual_type": "rag",
+          "must_contain": [
+            "迟到",
+            "绩效",
+            "旷工"
+          ],
+          "missing_keywords": [],
+          "answer_preview": "根据制度文档，迟到处理如下： *   迟到或早退30分钟以内，每次扣减当月绩效分1分。 *   迟到30分钟以上1小时以内，按旷工半天处理。 *   迟到1小时以上，按旷工1天处理。 *   每月累计迟到早退3次及以上，将给予书面警告。",
+          "error": null
+        }
+      ],
+      "error": null
+    }
+  ]
+}

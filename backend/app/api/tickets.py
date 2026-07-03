@@ -32,6 +32,37 @@ def list_tickets(status: Optional[str] = None, type: Optional[str] = None, page:
     return paginated([TicketOut.model_validate(t).model_dump() for t in items], total, page, page_size)
 
 
+@router.get("/stats")
+def ticket_stats(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
+    total = db.query(Ticket).count()
+    pending = db.query(Ticket).filter(Ticket.status == "pending").count()
+    processing = db.query(Ticket).filter(Ticket.status == "processing").count()
+    completed = db.query(Ticket).filter(Ticket.status == "completed").count()
+    rejected = db.query(Ticket).filter(Ticket.status == "rejected").count()
+    completed_tickets = db.query(Ticket).filter(Ticket.status == "completed", Ticket.resolved_at != None).all()
+    avg_hours = 0
+    if completed_tickets:
+        total_hours = sum((t.resolved_at - t.created_at).total_seconds() / 3600 for t in completed_tickets)
+        avg_hours = round(total_hours / len(completed_tickets), 1)
+    return success({"total": total, "pending": pending, "processing": processing, "completed": completed, "rejected": rejected, "avg_hours": avg_hours})
+
+
+@router.get("/detail/{ticket_id}")
+def get_ticket_detail(ticket_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """工单详情（独立路径，避免与旧版仅 PUT 的 /{ticket_id} 冲突）"""
+    return get_ticket(ticket_id, current_user, db)
+
+
+@router.get("/{ticket_id}")
+def get_ticket(ticket_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        return error("工单不存在")
+    if current_user.role not in ("hr", "admin") and ticket.creator_id != current_user.id:
+        return error("无权限查看该工单", code=403)
+    return success(TicketOut.model_validate(ticket).model_dump())
+
+
 @router.post("")
 def create_ticket(data: TicketCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     ticket = Ticket(
@@ -65,18 +96,3 @@ def update_ticket(ticket_id: int, data: TicketUpdate, current_user: User = Depen
     db.commit()
     db.refresh(ticket)
     return success(TicketOut.model_validate(ticket).model_dump())
-
-
-@router.get("/stats")
-def ticket_stats(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
-    total = db.query(Ticket).count()
-    pending = db.query(Ticket).filter(Ticket.status == "pending").count()
-    processing = db.query(Ticket).filter(Ticket.status == "processing").count()
-    completed = db.query(Ticket).filter(Ticket.status == "completed").count()
-    rejected = db.query(Ticket).filter(Ticket.status == "rejected").count()
-    completed_tickets = db.query(Ticket).filter(Ticket.status == "completed", Ticket.resolved_at != None).all()
-    avg_hours = 0
-    if completed_tickets:
-        total_hours = sum((t.resolved_at - t.created_at).total_seconds() / 3600 for t in completed_tickets)
-        avg_hours = round(total_hours / len(completed_tickets), 1)
-    return success({"total": total, "pending": pending, "processing": processing, "completed": completed, "rejected": rejected, "avg_hours": avg_hours})

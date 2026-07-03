@@ -1,0 +1,32 @@
+{
+  "test1_round1": {
+    "answer_type": "ticket_clarification",
+    "required_slots": [
+      "purpose",
+      "receiver",
+      "need_stamp",
+      "expected_time"
+    ]
+  },
+  "test1_round2": {
+    "answer_type": "ticket_confirm",
+    "has_ticket_draft": true,
+    "filled_slots": {
+      "ticket_type": "certify",
+      "title": "在职证明开具申请",
+      "display_type": "证明开具",
+      "purpose": "办理签证",
+      "receiver": "日本领事馆",
+      "need_stamp": true,
+      "expected_time": "本周五前"
+    }
+  },
+  "test1_confirm": {
+    "answer_type": "ticket_submitted",
+    "ticket": {
+      "ticket_id": 8,
+      "ticket_no": "TK202607030008",
+      "status": "pending"
+    }
+  }
+}

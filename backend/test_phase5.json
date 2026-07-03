@@ -1,0 +1,21 @@
+{
+  "1_faq": "faq",
+  "2_rule": "rule",
+  "3_rag": "faq",
+  "5_miss": "miss",
+  "5_miss_id": true,
+  "6_annual_1": "clarification",
+  "6_intent": "annual_leave_calculation",
+  "7_annual_2": "rule",
+  "9_ticket_1": "ticket_clarification",
+  "9_ticket_type": "certify",
+  "10_ticket_2": "ticket_confirm",
+  "10_has_draft": true,
+  "11_ticket_confirm": "ticket_submitted",
+  "11_has_ticket": true,
+  "12_rule": "rule",
+  "13_ticket": "ticket_clarification",
+  "14_emp_notice": "no_permission",
+  "15_hr_notice": "notice_clarification",
+  "18_isolation": "faq"
+}

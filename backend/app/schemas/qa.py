@@ -6,7 +6,8 @@ from pydantic import BaseModel
 class ChatRequest(BaseModel):
     question: str
     conversation_id: Optional[str] = None
-    action: Optional[str] = None  # 可选操作：confirm_submit, modify
+    action: Optional[str] = None  # 可选操作：confirm_submit, modify, manual_fill
+    ticket_slots: Optional[dict] = None  # 手动填写工单槽位
 
 
 class ChatResponse(BaseModel):

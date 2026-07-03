@@ -40,6 +40,11 @@ export const useChatStore = defineStore('chat', () => {
           record_id: r.id,
           feedback: r.feedback,
           is_favorite: !!r.is_favorite,
+          show_confirm_card: r.answer_type === 'ticket_confirm' && (r.answer || '').includes('请确认以下工单信息'),
+          actions: r.answer_type === 'ticket_qa' ? [
+            { type: 'confirm_submit', label: '确认提交' },
+            { type: 'modify', label: '继续修改' },
+          ] : [],
         })
       }
     } catch (e) {

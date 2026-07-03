@@ -64,17 +64,22 @@
           <div style="margin-bottom: 16px">
             <el-button type="primary" @click="showCreateTicket">创建请求</el-button>
           </div>
-          <el-table :data="tickets" v-loading="ticketLoading" stripe>
-            <el-table-column prop="ticket_no" label="编号" width="130" />
-            <el-table-column prop="title" label="标题" min-width="200" />
-            <el-table-column prop="type" label="类型" width="90">
+          <el-table :data="tickets" v-loading="ticketLoading" stripe class="ticket-table" @row-click="viewTicketDetail">
+            <el-table-column prop="ticket_no" label="编号" width="140" />
+            <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="type" label="类型" width="100">
               <template #default="{ row }"><el-tag size="small">{{ ticketTypeLabel(row.type) }}</el-tag></template>
             </el-table-column>
-            <el-table-column prop="status" label="状态" width="80">
+            <el-table-column prop="status" label="状态" width="90">
               <template #default="{ row }"><el-tag :type="ticketStatusType(row.status)" size="small">{{ ticketStatusLabel(row.status) }}</el-tag></template>
             </el-table-column>
             <el-table-column prop="created_at" label="时间" width="110">
               <template #default="{ row }">{{ row.created_at?.substring(0, 10) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="90">
+              <template #default="{ row }">
+                <el-button size="small" type="primary" plain @click.stop="viewTicketDetail(row)">详情</el-button>
+              </template>
             </el-table-column>
           </el-table>
           <el-pagination style="margin-top: 16px; justify-content: center" :current-page="ticketPage" :page-size="20" :total="ticketTotal" layout="prev, pager, next" @current-change="p => { ticketPage = p; fetchTickets() }" />
@@ -101,6 +106,30 @@
       </div>
     </el-drawer>
 
+    <!-- 工单详情抽屉 -->
+    <el-drawer v-model="ticketDetailVisible" title="工单详情" size="480px">
+      <el-descriptions v-if="ticketDetail.id" :column="1" border>
+        <el-descriptions-item label="工单编号">{{ ticketDetail.ticket_no }}</el-descriptions-item>
+        <el-descriptions-item label="标题">{{ ticketDetail.title }}</el-descriptions-item>
+        <el-descriptions-item label="类型">
+          <el-tag size="small">{{ ticketTypeLabel(ticketDetail.type) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="ticketStatusType(ticketDetail.status)" size="small">{{ ticketStatusLabel(ticketDetail.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="提交时间">{{ ticketDetail.created_at }}</el-descriptions-item>
+        <el-descriptions-item v-if="ticketDetail.resolved_at" label="完成时间">{{ ticketDetail.resolved_at }}</el-descriptions-item>
+      </el-descriptions>
+      <div v-if="ticketDetail.description" style="margin-top: 16px">
+        <h4 style="margin: 0 0 8px; color: #374151">详细说明</h4>
+        <div style="white-space: pre-wrap; line-height: 1.8; color: #111827; background: #f9fafb; padding: 12px; border-radius: 8px">{{ ticketDetail.description }}</div>
+      </div>
+      <div v-if="ticketDetail.resolve_note" style="margin-top: 16px">
+        <h4 style="margin: 0 0 8px; color: #374151">处理备注</h4>
+        <div style="white-space: pre-wrap; line-height: 1.8; color: #374151">{{ ticketDetail.resolve_note }}</div>
+      </div>
+    </el-drawer>
+
     <!-- 创建工单对话框 -->
     <el-dialog v-model="createTicketVisible" title="创建人工请求" width="500px">
       <el-form :model="createForm" label-width="80px">
@@ -108,6 +137,7 @@
           <el-select v-model="createForm.type">
             <el-option label="证明开具" value="certify" />
             <el-option label="信息变更" value="info_change" />
+            <el-option label="考勤异常" value="attendance_exception" />
             <el-option label="其他" value="other" />
           </el-select>
         </el-form-item>
@@ -129,6 +159,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getChatHistory, toggleFavorite, deleteHistory } from '../api/chatHistory'
 import { getFeedbacks } from '../api/feedback'
 import { getTickets, createTicket } from '../api/tickets'
+import { ticketTypeLabel, ticketStatusLabel, ticketStatusType } from '../utils/ticketLabels'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
@@ -188,12 +219,16 @@ const ticketLoading = ref(false)
 const tickets = ref([])
 const ticketPage = ref(1)
 const ticketTotal = ref(0)
+const ticketDetailVisible = ref(false)
+const ticketDetail = ref({})
 const createTicketVisible = ref(false)
 const createForm = reactive({ type: 'other', title: '', description: '' })
 
-function ticketTypeLabel(t) { return { certify: '证明开具', info_change: '信息变更', other: '其他' }[t] || t }
-function ticketStatusType(s) { return { pending: 'warning', processing: 'primary', completed: 'success', rejected: 'danger' }[s] || '' }
-function ticketStatusLabel(s) { return { pending: '待处理', processing: '处理中', completed: '已完成', rejected: '已驳回' }[s] || s }
+function viewTicketDetail(row) {
+  // 列表接口已返回完整 TicketOut 字段，无需再请求详情接口
+  ticketDetail.value = { ...row }
+  ticketDetailVisible.value = true
+}
 
 async function fetchTickets() {
   ticketLoading.value = true
@@ -222,3 +257,9 @@ watch(activeTab, (tab) => {
 
 onMounted(() => fetchFavorites())
 </script>
+
+<style scoped>
+.ticket-table :deep(.el-table__row) {
+  cursor: pointer;
+}
+</style>

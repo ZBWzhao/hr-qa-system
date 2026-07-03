@@ -146,6 +146,35 @@ class ConversationStateService:
         self.db.refresh(state)
         return state
 
+    def set_ticket_modify_mode(self, user_id: int, conversation_id: str) -> ConversationState:
+        """工单确认阶段回到槽位补充/修改模式"""
+        state = self.get_or_create_state(user_id, conversation_id)
+        state.status = "waiting_for_slot"
+        state.updated_at = datetime.now()
+        self.db.commit()
+        self.db.refresh(state)
+        return state
+
+    def pause_ticket_for_qa(self, user_id: int, conversation_id: str) -> ConversationState:
+        """暂停工单以回答其它问题，保留已填槽位"""
+        state = self.get_or_create_state(user_id, conversation_id)
+        state.status = "ticket_paused"
+        state.updated_at = datetime.now()
+        self.db.commit()
+        self.db.refresh(state)
+        return state
+
+    def resume_ticket(
+        self, user_id: int, conversation_id: str, target_status: str = "waiting_for_slot"
+    ) -> ConversationState:
+        """从暂停状态恢复工单流程"""
+        state = self.get_or_create_state(user_id, conversation_id)
+        state.status = target_status
+        state.updated_at = datetime.now()
+        self.db.commit()
+        self.db.refresh(state)
+        return state
+
     def clear_pending_intent(self, user_id: int, conversation_id: str) -> ConversationState:
         """
         在任务完成后清空 pending_intent

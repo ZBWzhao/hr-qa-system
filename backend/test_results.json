@@ -1,0 +1,40 @@
+{
+  "test1_round1": {
+    "answer_type": "ticket_clarification",
+    "intent": "ticket_create",
+    "ticket_type": "certify",
+    "required_slots": [
+      "purpose",
+      "receiver",
+      "need_stamp",
+      "expected_time"
+    ]
+  },
+  "test1_round2": {
+    "answer_type": "ticket_clarification",
+    "has_ticket_draft": false,
+    "actions": []
+  },
+  "test1_confirm": {
+    "answer_type": "ticket_submitted",
+    "ticket": {
+      "ticket_id": 7,
+      "ticket_no": "TK202607030007",
+      "status": "pending"
+    }
+  },
+  "test2_faq": {
+    "answer_type": "faq"
+  },
+  "test3_annual": {
+    "answer_type": "clarification",
+    "intent": "annual_leave_calculation"
+  },
+  "test4_rule": {
+    "answer_type": "rule"
+  },
+  "test5_ticket": {
+    "answer_type": "ticket_clarification",
+    "ticket_type": "attendance_exception"
+  }
+}

@@ -4,6 +4,10 @@ export function getTickets(params) {
   return request.get('/tickets', { params })
 }
 
+export function getTicket(ticketId) {
+  return request.get(`/tickets/detail/${ticketId}`)
+}
+
 export function createTicket(data) {
   return request.post('/tickets', data)
 }

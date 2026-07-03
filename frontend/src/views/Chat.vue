@@ -104,24 +104,31 @@
           <el-avatar v-else :size="isMobile ? 30 : 36" style="background: #D97706; color: #fff"><ChatDotRound /></el-avatar>
           <div class="message-content">
             <div class="message-bubble" :class="msg.role">
-              <!-- 工单确认卡片 -->
-              <div v-if="msg.answer_type === 'ticket_confirm' && msg.ticket_draft" class="ticket-confirm-card">
+              <!-- 工单确认卡片：仅首次确认时展示 -->
+              <div v-if="shouldShowTicketConfirmCard(msg)" class="ticket-confirm-card">
                 <div class="ticket-confirm-title">请确认以下工单信息：</div>
                 <div class="ticket-confirm-row">
                   <span class="ticket-confirm-label">工单类型：</span>
-                  <span class="ticket-confirm-value">{{ msg.ticket_draft.title || '' }}</span>
+                  <span class="ticket-confirm-value">{{ ticketDisplayName(msg) }}</span>
                 </div>
-                <div v-for="(value, key) in msg.ticket_draft.fields" :key="key" class="ticket-confirm-row">
-                  <span class="ticket-confirm-label">{{ slotLabel(key) }}：</span>
+                <div v-for="(value, key) in getTicketConfirmFields(msg)" :key="key" class="ticket-confirm-row">
+                  <span class="ticket-confirm-label">{{ slotLabel(key, msg) }}：</span>
                   <span class="ticket-confirm-value">{{ value === true ? '是' : value === false ? '否' : value }}</span>
                 </div>
                 <div class="ticket-confirm-actions">
                   <el-button type="primary" size="small" @click="confirmTicketSubmit(msg)">确认提交</el-button>
                   <el-button size="small" @click="modifyTicket(msg)">继续修改</el-button>
+                  <el-button size="small" @click="openManualFill(msg)">手动填写</el-button>
                 </div>
               </div>
-              <!-- 普通消息 -->
-              <div v-else v-html="formatMessage(msg.content)"></div>
+              <!-- 普通消息 / 工单追问回复 -->
+              <div v-if="shouldShowMessageText(msg)" v-html="formatMessage(msg.content)"></div>
+              <!-- 工单追问 / 槽位补充：文字下方保留快捷操作 -->
+              <div v-if="shouldShowTicketActions(msg)" class="ticket-confirm-actions">
+                <el-button v-if="hasTicketAction(msg, 'confirm_submit')" type="primary" size="small" @click="confirmTicketSubmit(msg)">确认提交</el-button>
+                <el-button v-if="hasTicketAction(msg, 'modify')" size="small" @click="modifyTicket(msg)">继续修改</el-button>
+                <el-button v-if="shouldShowManualFill(msg)" size="small" @click="openManualFill(msg)">手动填写</el-button>
+              </div>
             </div>
             <!-- 回答类型标签 -->
             <div v-if="msg.role === 'assistant' && msg.answer_type" class="answer-type-tag">
@@ -130,6 +137,7 @@
               <el-tag v-else-if="msg.answer_type === 'rag'" type="primary" size="small" effect="plain">已查阅制度文档</el-tag>
               <el-tag v-else-if="msg.answer_type === 'clarification'" type="info" size="small" effect="plain">需要补充信息</el-tag>
               <el-tag v-else-if="msg.answer_type === 'ticket_clarification'" type="warning" size="small" effect="plain">工单申请</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'ticket_qa'" type="warning" size="small" effect="plain">工单咨询</el-tag>
               <el-tag v-else-if="msg.answer_type === 'ticket_confirm'" type="warning" size="small" effect="plain">待确认工单</el-tag>
               <el-tag v-else-if="msg.answer_type === 'ticket_submitted'" type="success" size="small" effect="plain">工单已提交</el-tag>
               <el-tag v-else-if="msg.answer_type === 'notice_confirm'" type="info" size="small" effect="plain">待确认</el-tag>
@@ -151,7 +159,7 @@
               <el-tag v-if="msg.miss_id" type="success" size="small" style="margin-left: 8px">已记录知识缺口</el-tag>
             </div>
             <!-- 操作按钮 -->
-            <div v-if="msg.role === 'assistant' && msg.record_id && !['ticket_confirm', 'ticket_clarification'].includes(msg.answer_type)" class="message-actions">
+            <div v-if="msg.role === 'assistant' && msg.record_id && !['ticket_confirm', 'ticket_clarification', 'ticket_qa'].includes(msg.answer_type)" class="message-actions">
               <el-button-group size="small">
                 <el-button @click="feedback(msg, 'useful')" :type="msg.feedback === 'useful' ? 'success' : ''"><el-icon><Select /></el-icon></el-button>
                 <el-button @click="feedback(msg, 'useless')" :type="msg.feedback === 'useless' ? 'danger' : ''"><el-icon><CloseBold /></el-icon></el-button>
@@ -187,6 +195,23 @@
       </div>
       <el-input v-model="notes" type="textarea" :autosize="false" placeholder="在这里记录笔记...&#10;&#10;可以记录对话要点、待办事项等" class="notes-textarea" />
     </div>
+
+    <!-- 工单手动填写弹窗 -->
+    <el-dialog v-model="manualFillVisible" title="手动填写工单" width="520px" destroy-on-close>
+      <el-form v-if="manualFillFields.length" label-width="120px">
+        <el-form-item v-for="field in manualFillFields" :key="field.key" :label="field.label" :required="field.required">
+          <el-select v-if="field.type === 'select'" v-model="manualFillForm[field.key]" style="width: 100%">
+            <el-option v-for="opt in field.options" :key="String(opt.value)" :label="opt.label" :value="opt.value" />
+          </el-select>
+          <el-input v-else-if="field.type === 'textarea'" v-model="manualFillForm[field.key]" type="textarea" :rows="3" :placeholder="field.placeholder" />
+          <el-input v-else v-model="manualFillForm[field.key]" :placeholder="field.placeholder" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="manualFillVisible = false">取消</el-button>
+        <el-button type="primary" :loading="loading" @click="submitManualFill">提交</el-button>
+      </template>
+    </el-dialog>
 
   </div>
 </template>
@@ -288,36 +313,245 @@ function formatMessage(text) {
 }
 
 function docTitle(doc) {
-  return doc.title || doc.question || doc.name || doc.faq_id ? ('FAQ #' + doc.faq_id) : doc.rule_id ? ('规则 #' + doc.rule_id) : doc.doc_id ? ('文档 #' + doc.doc_id) : '来源文档'
+  if (doc.rule_id) return `规则 #${doc.rule_id}${doc.name ? '：' + doc.name : ''}`
+  if (doc.faq_id) return `FAQ #${doc.faq_id}${doc.question ? '：' + doc.question : ''}`
+  if (doc.doc_id) return `文档 #${doc.doc_id}`
+  return doc.name || doc.title || doc.question || doc.document || doc.source || '来源文档'
 }
 
-// 工单槽位标签映射
-function slotLabel(key) {
-  const labels = {
-    purpose: '证明用途',
-    receiver: '接收单位',
-    need_stamp: '是否需要盖章',
-    expected_time: '期望完成时间',
-    change_item: '变更信息类型',
-    old_value: '原信息',
-    new_value: '新信息',
-    reason: '变更原因',
-    exception_date: '异常日期',
-    exception_type: '异常类型',
-    description: '问题说明',
-    issue_type: '问题类型'
-  }
-  return labels[key] || key
+// 工单槽位标签映射（后端 slot_labels 优先）
+const DEFAULT_SLOT_LABELS = {
+  purpose: '证明用途',
+  receiver: '接收单位',
+  need_stamp: '是否需要盖章',
+  expected_time: '期望完成时间',
+  change_item: '变更信息类型',
+  old_value: '原信息',
+  new_value: '新信息',
+  reason: '变更原因',
+  exception_date: '异常日期',
+  exception_type: '异常类型',
+  description: '补充说明',
+  issue_type: '问题类型',
 }
+
+const TICKET_FORM_CONFIG = {
+  certify: [
+    { key: 'purpose', label: '证明用途', type: 'text', required: true, placeholder: '例如：办理签证' },
+    { key: 'receiver', label: '接收单位', type: 'text', required: true, placeholder: '例如：日本领事馆' },
+    { key: 'need_stamp', label: '是否需要盖章', type: 'select', required: true, options: [{ value: true, label: '是' }, { value: false, label: '否' }] },
+    { key: 'expected_time', label: '期望完成时间', type: 'text', required: true, placeholder: '例如：这周五前' },
+  ],
+  info_change: [
+    { key: 'change_item', label: '变更信息类型', type: 'select', required: true, options: [{ value: '手机号', label: '手机号' }, { value: '邮箱', label: '邮箱' }, { value: '地址', label: '地址' }, { value: '紧急联系人', label: '紧急联系人' }] },
+    { key: 'old_value', label: '原信息', type: 'text', required: true },
+    { key: 'new_value', label: '新信息', type: 'text', required: true },
+    { key: 'reason', label: '变更原因', type: 'textarea', required: true },
+  ],
+  attendance_exception: [
+    { key: 'exception_date', label: '异常日期', type: 'text', required: true, placeholder: '例如：2026年7月3日' },
+    { key: 'exception_type', label: '异常类型', type: 'select', required: true, options: [{ value: '打卡缺失', label: '打卡缺失' }, { value: '忘记打卡', label: '忘记打卡' }, { value: '迟到', label: '迟到' }, { value: '早退', label: '早退' }, { value: '补卡', label: '补卡' }] },
+    { key: 'reason', label: '异常原因', type: 'textarea', required: true, placeholder: '例如：忘记打卡' },
+  ],
+  other: [
+    { key: 'issue_type', label: '问题类型', type: 'text', required: true },
+    { key: 'description', label: '问题说明', type: 'textarea', required: true },
+    { key: 'expected_time', label: '期望处理时间', type: 'text', required: true, placeholder: '例如：3天内' },
+  ],
+}
+
+const manualFillVisible = ref(false)
+const manualFillForm = reactive({})
+const manualFillFields = ref([])
+const manualFillContext = ref(null)
+
+function slotLabel(key, msg = null) {
+  if (msg?.slot_labels?.[key]) return msg.slot_labels[key]
+  const ticketType = msg?.ticket_type || msg?.ticket_draft?.type || msg?.filled_slots?.ticket_type
+  if (key === 'reason' && ticketType === 'attendance_exception') return '异常原因'
+  if (key === 'description' && ticketType === 'attendance_exception') return '补充说明'
+  return DEFAULT_SLOT_LABELS[key] || key
+}
+
+function findLastTicketMessage() {
+  for (let i = chatStore.messages.length - 1; i >= 0; i--) {
+    const m = chatStore.messages[i]
+    if (m.role === 'assistant' && ['ticket_clarification', 'ticket_confirm', 'ticket_qa'].includes(m.answer_type)) {
+      return m
+    }
+  }
+  return null
+}
+
+const TICKET_FIELD_ORDER = {
+  certify: ['purpose', 'receiver', 'need_stamp', 'expected_time'],
+  info_change: ['change_item', 'old_value', 'new_value', 'reason'],
+  attendance_exception: ['exception_date', 'exception_type', 'reason'],
+  other: ['issue_type', 'description', 'expected_time'],
+}
+
+const TICKET_DISPLAY_NAMES = {
+  attendance_exception: '考勤异常',
+  certify: '证明开具',
+  info_change: '信息变更',
+  other: '人工请求',
+}
+
+function ticketDisplayName(msg) {
+  if (msg.display_type) return msg.display_type
+  const type = resolveTicketType(msg)
+  return TICKET_DISPLAY_NAMES[type] || msg.ticket_draft?.title || '工单'
+}
+
+function getTicketConfirmFields(msg) {
+  const type = resolveTicketType(msg)
+  const order = TICKET_FIELD_ORDER[type] || []
+  const raw = (msg.ticket_draft?.fields && Object.keys(msg.ticket_draft.fields).length)
+    ? msg.ticket_draft.fields
+    : (msg.filled_slots || {})
+  const fields = {}
+  for (const key of order) {
+    if (raw[key] !== undefined && raw[key] !== null && raw[key] !== '') {
+      fields[key] = raw[key]
+    }
+  }
+  return fields
+}
+
+function shouldShowTicketConfirmCard(msg) {
+  return (
+    msg.role === 'assistant'
+    && msg.answer_type === 'ticket_confirm'
+    && Object.keys(getTicketConfirmFields(msg)).length > 0
+  )
+}
+
+function shouldShowMessageText(msg) {
+  if (shouldShowTicketConfirmCard(msg)) return false
+  // 待确认工单只展示结构化卡片，不重复渲染 markdown 正文
+  if (msg.answer_type === 'ticket_confirm') return false
+  return Boolean(msg.content)
+}
+
+function hasTicketAction(msg, type) {
+  return msg.actions?.some(a => (typeof a === 'string' ? a : a.type) === type)
+}
+
+function shouldShowManualFill(msg) {
+  if (!['ticket_clarification', 'ticket_qa', 'ticket_confirm'].includes(msg.answer_type)) return false
+  const ticketType = msg.ticket_type || msg.ticket_draft?.type || msg.filled_slots?.ticket_type
+  return Boolean(ticketType) && (hasTicketAction(msg, 'manual_fill') || msg.answer_type === 'ticket_clarification')
+}
+
+function shouldShowTicketActions(msg) {
+  if (shouldShowTicketConfirmCard(msg)) return false
+  return (msg.answer_type === 'ticket_qa' && msg.actions?.length) || shouldShowManualFill(msg)
+}
+
+function resolveTicketType(msg) {
+  return msg.ticket_type || msg.ticket_draft?.type || msg.filled_slots?.ticket_type || 'other'
+}
+
+function openManualFill(msg) {
+  const ticketType = resolveTicketType(msg)
+  manualFillFields.value = TICKET_FORM_CONFIG[ticketType] || TICKET_FORM_CONFIG.other
+  manualFillContext.value = msg
+  Object.keys(manualFillForm).forEach(k => delete manualFillForm[k])
+  const existing = { ...(msg.filled_slots || {}), ...(msg.ticket_draft?.fields || {}) }
+  for (const field of manualFillFields.value) {
+    let val = existing[field.key] ?? ''
+    // 跳过被错误解析的整句（如「2026年7月3日, 打卡缺失, 忘记打卡」）
+    if (field.key === 'reason' && typeof val === 'string' && val.includes(',') && /\d{4}/.test(val)) {
+      val = ''
+    }
+    if (field.type === 'select') {
+      manualFillForm[field.key] = val || (field.options?.[0]?.value ?? '')
+    } else {
+      manualFillForm[field.key] = val
+    }
+  }
+  manualFillVisible.value = true
+}
+
+async function submitManualFill() {
+  const ticketType = resolveTicketType(manualFillContext.value)
+  const payload = {}
+  for (const field of manualFillFields.value) {
+    const val = manualFillForm[field.key]
+    if (val !== '' && val !== null && val !== undefined) payload[field.key] = val
+  }
+  if (ticketType === 'attendance_exception' && payload.reason) {
+    payload.description = payload.reason
+  }
+  const missing = manualFillFields.value.filter(f => f.required && !payload[f.key])
+  if (missing.length) {
+    ElMessage.warning(`请填写：${missing.map(f => f.label).join('、')}`)
+    return
+  }
+  manualFillVisible.value = false
+  loading.value = true
+  try {
+    const res = await sendChat({
+      question: '已手动填写工单',
+      conversation_id: chatStore.currentConversationId,
+      action: 'manual_fill',
+      ticket_slots: payload,
+    })
+    appendAssistantMessage(res.data)
+  } catch (e) {
+    chatStore.messages.push({ role: 'assistant', content: '抱歉，发生了错误，请稍后重试。' })
+  } finally {
+    loading.value = false
+    scrollToBottom()
+  }
+}
+
+function appendAssistantMessage(data) {
+  const convId = data.conversation_id
+  chatStore.messages.push({
+    role: 'assistant',
+    content: data.answer,
+    answer_type: data.answer_type,
+    intent: data.intent || null,
+    source_docs: data.source_docs || [],
+    required_slots: data.required_slots || [],
+    filled_slots: data.filled_slots || {},
+    slot_labels: data.slot_labels || {},
+    actions: data.actions || [],
+      ticket_draft: data.ticket_draft || null,
+      display_type: data.display_type || null,
+      show_confirm_card: data.show_confirm_card ?? (data.answer_type === 'ticket_confirm'),
+    ticket_type: data.ticket_type || null,
+    ticket: data.ticket || null,
+    miss_id: data.miss_id || null,
+    record_id: data.record_id,
+    feedback: null,
+    is_favorite: false,
+  })
+  if (convId) chatStore.currentConversationId = convId
+  if (convId && route.params.conversationId !== convId) {
+    const draftNotes = localStorage.getItem(notesKey(null)) || ''
+    if (draftNotes && !localStorage.getItem(notesKey(convId))) {
+      localStorage.setItem(notesKey(convId), draftNotes)
+      localStorage.removeItem(notesKey(null))
+    }
+    router.replace('/chat/' + convId)
+  }
+  chatStore.fetchConversations()
+}
+
+let pendingAction = null
 
 // 确认提交工单
 async function confirmTicketSubmit(msg) {
+  pendingAction = 'confirm_submit'
   input.value = '确认提交'
   await sendMessage()
 }
 
 // 继续修改工单
 async function modifyTicket(msg) {
+  pendingAction = 'modify'
   input.value = '继续修改'
   await sendMessage()
 }
@@ -368,6 +602,19 @@ async function handleDeleteConv(convId) {
 async function sendMessage() {
   const q = input.value.trim()
   if (!q || loading.value) return
+
+  // 聊天框输入「手动填写」时直接打开表单，不发给后端
+  if (/^手动填写/.test(q)) {
+    const lastTicket = findLastTicketMessage()
+    input.value = ''
+    if (lastTicket) {
+      openManualFill(lastTicket)
+    } else {
+      ElMessage.info('当前没有进行中的工单，请先发起工单申请')
+    }
+    return
+  }
+
   input.value = ''
   chatStore.messages.push({ role: 'user', content: q })
   scrollToBottom()
@@ -375,43 +622,13 @@ async function sendMessage() {
   // 调用后端 API，让后端处理所有业务逻辑
   loading.value = true
   try {
-    const res = await sendChat({ question: q, conversation_id: chatStore.currentConversationId })
-    const data = res.data
-
-    // 保存后端返回的 conversation_id
-    if (data.conversation_id) {
-      chatStore.currentConversationId = data.conversation_id
-    }
-
-    // 渲染后端返回的回答
-    chatStore.messages.push({
-      role: 'assistant',
-      content: data.answer,
-      answer_type: data.answer_type,
-      intent: data.intent || null,
-      source_docs: data.source_docs || [],
-      required_slots: data.required_slots || [],
-      filled_slots: data.filled_slots || {},
-      actions: data.actions || [],
-      ticket_draft: data.ticket_draft || null,
-      ticket: data.ticket || null,
-      miss_id: data.miss_id || null,
-      record_id: data.record_id,
-      feedback: null,
-      is_favorite: false,
+    const res = await sendChat({
+      question: q,
+      conversation_id: chatStore.currentConversationId,
+      action: pendingAction || undefined,
     })
-
-    // 更新URL和会话列表
-    const convId = data.conversation_id
-    if (convId && route.params.conversationId !== convId) {
-      const draftNotes = localStorage.getItem(notesKey(null)) || ''
-      if (draftNotes && !localStorage.getItem(notesKey(convId))) {
-        localStorage.setItem(notesKey(convId), draftNotes)
-        localStorage.removeItem(notesKey(null))
-      }
-      router.replace('/chat/' + convId)
-    }
-    chatStore.fetchConversations()
+    pendingAction = null
+    appendAssistantMessage(res.data)
   } catch (e) {
     chatStore.messages.push({ role: 'assistant', content: '抱歉，发生了错误，请稍后重试。' })
   } finally {
@@ -443,9 +660,12 @@ async function toggleFav(msg) {
 }
 
 // ===== 路由 =====
-watch(() => route.params.conversationId, (newId) => {
-  if (newId) chatStore.loadConversation(newId)
-  else chatStore.clearCurrentConversation()
+watch(() => route.params.conversationId, (newId, oldId) => {
+  if (newId && newId !== chatStore.currentConversationId) {
+    chatStore.loadConversation(newId)
+  } else if (!newId) {
+    chatStore.clearCurrentConversation()
+  }
   loadNotes(newId)
 })
 

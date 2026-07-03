@@ -34,6 +34,7 @@
           <el-select v-model="createForm.type">
             <el-option label="证明开具" value="certify" />
             <el-option label="信息变更" value="info_change" />
+            <el-option label="考勤异常" value="attendance_exception" />
             <el-option label="其他" value="other" />
           </el-select>
         </el-form-item>
@@ -72,6 +73,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getTickets, createTicket, updateTicket } from '../api/tickets'
+import { ticketTypeLabel, ticketStatusLabel, ticketStatusType } from '../utils/ticketLabels'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
@@ -87,9 +89,9 @@ const currentId = ref(null)
 const resolveNote = ref('')
 const rejectNote = ref('')
 
-function typeLabel(t) { return { certify: '证明开具', info_change: '信息变更', other: '其他' }[t] || t }
-function statusType(s) { return { pending: 'warning', processing: 'primary', completed: 'success', rejected: 'danger' }[s] || '' }
-function statusLabel(s) { return { pending: '待处理', processing: '处理中', completed: '已完成', rejected: '已驳回' }[s] || s }
+function typeLabel(t) { return ticketTypeLabel(t) }
+function statusType(s) { return ticketStatusType(s) }
+function statusLabel(s) { return ticketStatusLabel(s) }
 
 async function fetchData() {
   loading.value = true
