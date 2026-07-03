@@ -779,7 +779,61 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     if ticket_result:
         return ticket_result
 
-    # Step 6: 【第三优先级】判断是否需要年假澄清
+    # Step 6: 【第三优先级】判断是否是公告意图（公告发布走HR后台，不在聊天中处理）
+    notice_keywords = ['发布公告', '发通知', '发布通知', '发公告', '通知公告', '通知大家', '通知全体员工']
+    if any(kw in question for kw in notice_keywords):
+        if current_user.role not in ('hr', 'admin'):
+            # 员工无权发布公告
+            answer = "抱歉，您没有发布公告的权限。只有 HR 和管理员可以发布公告。\n\n如需发布公告，请联系 HR 部门。"
+            record = QARecord(
+                user_id=current_user.id,
+                question=question,
+                answer=answer,
+                answer_type="no_permission",
+                source_docs=json.dumps([]),
+                conversation_id=conv_id
+            )
+            db.add(record)
+            db.commit()
+            db.refresh(record)
+            return success({
+                "answer": answer,
+                "answer_type": "no_permission",
+                "intent": "notice_publish",
+                "source_docs": [],
+                "record_id": record.id,
+                "conversation_id": conv_id,
+                "required_slots": [],
+                "filled_slots": {},
+                "actions": []
+            })
+        else:
+            # HR发布公告 - 引导到后台页面
+            answer = "通知公告发布请前往 HR 后台的「通知发布」页面操作，支持设置类型、置顶等功能。\n\n如需在聊天中快速发布，请直接告诉我公告标题和内容。"
+            record = QARecord(
+                user_id=current_user.id,
+                question=question,
+                answer=answer,
+                answer_type="notice_clarification",
+                source_docs=json.dumps([]),
+                conversation_id=conv_id
+            )
+            db.add(record)
+            db.commit()
+            db.refresh(record)
+            return success({
+                "answer": answer,
+                "answer_type": "notice_clarification",
+                "intent": "notice_publish",
+                "source_docs": [],
+                "record_id": record.id,
+                "conversation_id": conv_id,
+                "required_slots": [],
+                "filled_slots": {},
+                "actions": []
+            })
+
+    # Step 7: 【第四优先级】判断是否需要年假澄清
     if is_annual_leave_days_question(question):
         # 检查是否同时提供了工龄信息（用户可能一次性说完）
         slots = extract_slots_for_intent(question, "annual_leave_calculation")
@@ -835,7 +889,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             # 用户没有提供工龄信息，进入澄清流程
             return handle_annual_leave_clarification(question, conv_id, current_user.id, db)
 
-    # Step 7: 【原有逻辑】关键词匹配FAQ
+    # Step 8: 【原有逻辑】关键词匹配FAQ
     context = get_conversation_context(db, current_user.id, conv_id)
 
     faq = match_faq(db, question)
@@ -866,7 +920,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "actions": []
         })
 
-    # Step 8: 【原有逻辑】关键词匹配规则
+    # Step 9: 【原有逻辑】关键词匹配规则
     rule = match_rule(db, question)
     if rule:
         answer = f"我理解您的问题，根据公司相关规则查询：\n\n"
@@ -894,7 +948,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "actions": []
         })
 
-    # Step 9: 【原有逻辑】RAG搜索 + AI生成
+    # Step 10: 【原有逻辑】RAG搜索 + AI生成
     answer, sources, confidence = rag_search_and_generate(question, context)
 
     if confidence == "need_clarification":
@@ -923,6 +977,8 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     if confidence == "low_confidence":
         miss = QAMiss(user_id=current_user.id, question=question)
         db.add(miss)
+        db.commit()
+        db.refresh(miss)
 
         clarification = f"抱歉，关于「{question}」，当前知识库暂未找到明确依据。\n\n建议您：\n1. 换个关键词重新提问\n2. 联系HR部门获取帮助\n3. 提交工单进行详细咨询"
 
@@ -940,15 +996,17 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
         return success({
             "answer": clarification,
             "answer_type": "miss",
+            "intent": "miss",
             "source_docs": [],
             "record_id": record.id,
             "conversation_id": conv_id,
             "required_slots": [],
             "filled_slots": {},
-            "actions": []
+            "actions": ["transfer_to_hr"],
+            "miss_id": miss.id
         })
 
-    # Step 10: 【原有逻辑】高置信度回答
+    # Step 11: 【原有逻辑】高置信度回答
     record = QARecord(
         user_id=current_user.id,
         question=question,
