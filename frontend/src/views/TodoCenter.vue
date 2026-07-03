@@ -3,7 +3,7 @@
     <template #header>
       <div style="display: flex; justify-content: space-between; align-items: center">
         <span style="font-weight: 600; color: #111827">待办中心</span>
-        <div style="display: flex; gap: 12px">
+        <div style="display: flex; gap: 12px; flex-wrap: wrap">
           <el-badge :value="pendingTickets" :hidden="pendingTickets === 0" :max="99">
             <el-tag :type="activeTab === 'tickets' ? '' : 'info'" style="cursor: pointer" @click="activeTab = 'tickets'">工单</el-tag>
           </el-badge>
@@ -20,7 +20,7 @@
     <el-tabs v-model="activeTab">
       <!-- 工单管理 -->
       <el-tab-pane label="工单管理" name="tickets">
-        <div style="display: flex; gap: 12px; margin-bottom: 16px">
+        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap">
           <el-select v-model="ticketStatusFilter" placeholder="全部状态" clearable @change="fetchTickets" style="width: 160px">
             <el-option label="待处理" value="pending" />
             <el-option label="处理中" value="processing" />

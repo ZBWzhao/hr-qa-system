@@ -2,13 +2,13 @@
   <el-card>
     <template #header><span style="font-weight: 600; color: #111827">知识缺口分析</span></template>
     <el-row :gutter="20" style="margin-bottom: 20px">
-      <el-col :span="8">
+      <el-col :xs="12" :sm="12" :md="8">
         <el-statistic title="总未命中数" :value="stats.total || 0" />
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="12" :sm="12" :md="8">
         <el-statistic title="未解决" :value="stats.unresolved || 0" />
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="12" :sm="12" :md="8">
         <el-statistic title="已解决" :value="stats.resolved || 0" />
       </el-col>
     </el-row>

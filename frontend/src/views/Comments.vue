@@ -2,12 +2,12 @@
   <el-card>
     <template #header><span style="font-weight: 600; color: #111827">评论讨论</span></template>
 
-    <div style="display: flex; gap: 12px; margin-bottom: 20px">
+    <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap">
       <el-select v-model="targetType" placeholder="选择类型" style="width: 120px" @change="fetchComments">
         <el-option label="FAQ" value="faq" />
         <el-option label="文档" value="document" />
       </el-select>
-      <el-select v-model="targetId" :placeholder="targetType === 'faq' ? '选择FAQ' : '选择文档'" style="width: 300px" @change="fetchComments" filterable>
+      <el-select v-model="targetId" :placeholder="targetType === 'faq' ? '选择FAQ' : '选择文档'" style="flex: 1; min-width: 160px" @change="fetchComments" filterable>
         <el-option v-for="item in targetOptions" :key="item.id" :label="item.title || item.question" :value="item.id" />
       </el-select>
     </div>

@@ -1,7 +1,7 @@
 <template>
   <div class="chat-layout">
-    <!-- 左侧对话列表 -->
-    <div class="chat-sidebar">
+    <!-- 左侧对话列表 (桌面端) -->
+    <div v-if="!isMobile" class="chat-sidebar">
       <el-button type="primary" class="new-chat-btn" @click="startNewChat">
         <el-icon><Plus /></el-icon>新建对话
       </el-button>
@@ -20,12 +20,50 @@
       </div>
     </div>
 
+    <!-- 移动端对话列表抽屉 -->
+    <el-drawer v-model="showMobileSidebar" direction="ltr" :size="280" :show-close="false" :with-header="false" class="chat-sidebar-drawer">
+      <div style="padding: 12px">
+        <el-button type="primary" style="width: 100%" @click="startNewChat(); showMobileSidebar = false">
+          <el-icon><Plus /></el-icon>新建对话
+        </el-button>
+      </div>
+      <div class="conversation-list">
+        <div v-for="group in chatStore.groups" :key="group.label" class="conv-group">
+          <div class="conv-group-label">{{ dateGroupLabel(group.label) }}</div>
+          <div v-for="conv in group.conversations" :key="conv.conversation_id"
+               :class="['conv-item', { active: chatStore.currentConversationId === conv.conversation_id }]"
+               @click="openConversation(conv.conversation_id); showMobileSidebar = false">
+            <div class="conv-title">{{ conv.title }}</div>
+            <el-button class="conv-delete" type="danger" :icon="Delete" circle size="small"
+                       @click.stop="handleDeleteConv(conv.conversation_id)" />
+          </div>
+        </div>
+        <div v-if="chatStore.groups.length === 0" class="empty-hint">暂无对话记录</div>
+      </div>
+    </el-drawer>
+
+    <!-- 移动端笔记抽屉 -->
+    <el-drawer v-model="showMobileNotes" direction="rtl" :size="280" title="📝 我的笔记" class="chat-notes-drawer">
+      <el-input v-model="notes" type="textarea" :autosize="false" placeholder="在这里记录笔记...&#10;&#10;可以记录对话要点、待办事项等" class="notes-textarea" />
+    </el-drawer>
+
     <!-- 中间聊天区域 -->
     <div class="chat-main">
+      <!-- 移动端工具栏 -->
+      <div v-if="isMobile" class="mobile-chat-toolbar">
+        <el-button text @click="showMobileSidebar = true">
+          <el-icon :size="20"><Expand /></el-icon>
+        </el-button>
+        <span class="mobile-chat-title">HR 智能助手</span>
+        <el-button text @click="showMobileNotes = true">
+          <el-icon :size="20"><EditPen /></el-icon>
+        </el-button>
+      </div>
+
       <div class="chat-messages" ref="messagesRef">
         <!-- 欢迎屏 -->
         <div class="welcome" v-if="chatStore.messages.length === 0">
-          <el-icon :size="60" color="#D97706"><ChatDotRound /></el-icon>
+          <el-icon :size="isMobile ? 44 : 60" color="#D97706"><ChatDotRound /></el-icon>
           <h2>HR 智能助手</h2>
           <p>我可以帮你查询公司制度，也可以在需要办理事项时，引导你补全信息并生成工单，确认后提交给 HR。<br>你可以直接提问，例如"年假怎么计算"，也可以说"我想申请开具在职证明"。</p>
 
@@ -62,8 +100,8 @@
 
         <!-- 消息列表 -->
         <div v-for="(msg, idx) in chatStore.messages" :key="idx" :class="['message', msg.role]">
-          <el-avatar v-if="msg.role === 'user'" :size="36" style="background: #D97706; color: #fff">{{ userStore.userInfo.real_name?.[0] || 'U' }}</el-avatar>
-          <el-avatar v-else :size="36" style="background: #D97706; color: #fff"><ChatDotRound /></el-avatar>
+          <el-avatar v-if="msg.role === 'user'" :size="isMobile ? 30 : 36" style="background: #D97706; color: #fff">{{ userStore.userInfo.real_name?.[0] || 'U' }}</el-avatar>
+          <el-avatar v-else :size="isMobile ? 30 : 36" style="background: #D97706; color: #fff"><ChatDotRound /></el-avatar>
           <div class="message-content">
             <div class="message-bubble" :class="msg.role">
               <div v-html="formatMessage(msg.content)"></div>
@@ -110,7 +148,7 @@
         </div>
         <!-- 加载动画 -->
         <div v-if="loading" class="message assistant">
-          <el-avatar :size="36" style="background: #D97706; color: #fff"><ChatDotRound /></el-avatar>
+          <el-avatar :size="isMobile ? 30 : 36" style="background: #D97706; color: #fff"><ChatDotRound /></el-avatar>
           <div class="message-content">
             <div class="message-bubble assistant loading-bubble">
               <span class="dot"></span><span class="dot"></span><span class="dot"></span>
@@ -126,8 +164,8 @@
       </div>
     </div>
 
-    <!-- 右侧笔记区 -->
-    <div class="notes-panel">
+    <!-- 右侧笔记区 (桌面端) -->
+    <div v-if="!isMobile" class="notes-panel">
       <div class="notes-header">
         <span style="font-weight: 600; color: #111827">📝 我的笔记</span>
       </div>
@@ -193,10 +231,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Promotion, ChatDotRound, Star, Select, CloseBold, Plus, Delete, Document, Tickets } from '@element-plus/icons-vue'
+import { Promotion, ChatDotRound, Star, Select, CloseBold, Plus, Delete, Document, Tickets, Expand, EditPen } from '@element-plus/icons-vue'
 import { sendChat, saveChatRecord } from '../api/chat'
 import { createFeedback } from '../api/feedback'
 import { toggleFavorite } from '../api/chatHistory'
@@ -214,6 +252,15 @@ const messagesRef = ref()
 const input = ref('')
 const loading = ref(false)
 const notes = ref('')
+
+// 移动端适配
+const isMobile = ref(window.innerWidth <= 768)
+const showMobileSidebar = ref(false)
+const showMobileNotes = ref(false)
+
+function handleResize() {
+  isMobile.value = window.innerWidth <= 768
+}
 
 // ===== 能力模式 =====
 const activeMode = ref('policy')
@@ -873,6 +920,11 @@ onMounted(async () => {
     input.value = route.query.q
     sendMessage()
   }
+  window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 
@@ -941,4 +993,89 @@ onMounted(async () => {
 .notes-header { padding: 16px; border-bottom: 1px solid #f3f4f6; }
 .notes-textarea { flex: 1; }
 .notes-textarea :deep(.el-textarea__inner) { height: 100% !important; border: none; border-radius: 0; resize: none; background: transparent; box-shadow: none; padding: 16px; font-size: 13px; line-height: 1.8; }
+
+/* 移动端工具栏 */
+.mobile-chat-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  background: #fff;
+  flex-shrink: 0;
+}
+.mobile-chat-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .chat-layout {
+    border-radius: 0;
+    border: none;
+    height: calc(100vh - 108px);
+  }
+  .chat-messages {
+    padding: 12px;
+  }
+  .capability-cards {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .cap-card {
+    padding: 14px;
+  }
+  .welcome {
+    padding: 24px 12px 16px;
+  }
+  .welcome h2 {
+    font-size: 20px;
+  }
+  .welcome p {
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+  .message-content {
+    max-width: 85%;
+  }
+  .message-bubble {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+  .miss-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .message-actions {
+    flex-wrap: wrap;
+  }
+  .chat-input {
+    padding: 10px 12px;
+  }
+  .quick-questions {
+    gap: 6px;
+  }
+  .quick-questions .el-tag {
+    font-size: 12px;
+  }
+}
+
+/* 移动端抽屉样式 */
+:deep(.chat-sidebar-drawer .el-drawer__body) {
+  padding: 0;
+  overflow: hidden;
+}
+:deep(.chat-notes-drawer .el-drawer__body) {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 768px) {
+  :deep(.chat-notes-drawer) {
+    width: 88vw !important;
+  }
+}
 </style>

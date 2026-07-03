@@ -1,7 +1,7 @@
 <template>
   <div>
     <el-row :gutter="20" style="margin-bottom: 20px">
-      <el-col :span="6" v-for="card in statCards" :key="card.title">
+      <el-col :xs="12" :sm="12" :md="6" v-for="card in statCards" :key="card.title">
         <el-card shadow="hover" style="cursor: pointer; border-radius: 12px" @click="card.action && card.action()">
           <div style="display: flex; align-items: center; justify-content: space-between">
             <div>
@@ -15,7 +15,7 @@
     </el-row>
 
     <el-row :gutter="20">
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header><span style="font-weight: 600; color: #111827">猜你想问</span></template>
           <div v-for="(item, idx) in recommendations" :key="idx" style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; cursor: pointer" @click="goChat(item.question)">
@@ -25,7 +25,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header><span style="font-weight: 600; color: #111827">最新通知</span></template>
           <div v-for="notice in notices" :key="notice.id" style="padding: 10px 0; border-bottom: 1px solid #f3f4f6">
@@ -43,7 +43,7 @@
     </el-row>
 
     <el-row :gutter="20" style="margin-top: 20px" v-if="userStore.userInfo.role === 'employee'">
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header><span style="font-weight: 600; color: #111827">我的工单</span></template>
           <div v-for="ticket in tickets" :key="ticket.id" style="padding: 10px 0; border-bottom: 1px solid #f3f4f6">
@@ -55,7 +55,7 @@
           <el-empty v-if="!tickets.length" description="暂无工单" />
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header><span style="font-weight: 600; color: #111827">我的提醒</span></template>
           <div v-for="(r, idx) in reminders" :key="idx" style="padding: 10px 0; border-bottom: 1px solid #f3f4f6">
@@ -68,7 +68,7 @@
     </el-row>
 
     <el-row :gutter="20" style="margin-top: 20px" v-if="userStore.isHR">
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header><span style="font-weight: 600; color: #111827">待处理工单</span></template>
           <div v-for="ticket in tickets" :key="ticket.id" style="padding: 10px 0; border-bottom: 1px solid #f3f4f6">
@@ -80,7 +80,7 @@
           <el-empty v-if="!tickets.length" description="暂无待处理工单" />
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header><span style="font-weight: 600; color: #111827">知识缺口</span></template>
           <div style="text-align: center; padding: 20px">

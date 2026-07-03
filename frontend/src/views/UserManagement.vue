@@ -1,9 +1,9 @@
 <template>
   <el-card>
     <template #header>
-      <div style="display: flex; justify-content: space-between; align-items: center">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
         <span style="font-weight: 600; color: #111827">用户管理</span>
-        <div style="display: flex; gap: 8px">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap">
           <el-button type="primary" @click="showAddSingle">
             <el-icon style="margin-right: 4px"><Plus /></el-icon>
             添加用户
@@ -15,7 +15,7 @@
         </div>
       </div>
     </template>
-    <div style="display: flex; gap: 12px; margin-bottom: 16px">
+    <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap">
       <el-select v-model="statusFilter" placeholder="全部状态" clearable @change="fetchData" style="width: 160px">
         <el-option label="全部" value="" />
         <el-option label="待审核" :value="0" />

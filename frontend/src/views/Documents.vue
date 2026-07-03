@@ -1,13 +1,13 @@
 <template>
   <el-card>
     <template #header>
-      <div style="display: flex; justify-content: space-between; align-items: center">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
         <span style="font-weight: 600; color: #111827">制度文档管理</span>
         <el-button v-if="userStore.isHR || userStore.isAdmin" type="primary" @click="showDialog()">上传文档</el-button>
       </div>
     </template>
-    <div style="display: flex; gap: 12px; margin-bottom: 16px">
-      <el-input v-model="filters.keyword" placeholder="搜索标题或内容..." clearable style="width: 260px" @keyup.enter="fetchData" @clear="fetchData">
+    <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap">
+      <el-input v-model="filters.keyword" placeholder="搜索标题或内容..." clearable style="flex: 1; min-width: 160px" @keyup.enter="fetchData" @clear="fetchData">
         <template #append>
           <el-button :icon="Search" @click="fetchData" />
         </template>

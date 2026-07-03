@@ -1,13 +1,13 @@
 <template>
   <div>
     <el-row :gutter="20">
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header><span style="font-weight: 600; color: #111827">问答量趋势</span></template>
           <div ref="trendChart" style="height: 350px"></div>
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center">
@@ -20,7 +20,7 @@
       </el-col>
     </el-row>
     <el-row :gutter="20" style="margin-top: 20px">
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center">
@@ -31,7 +31,7 @@
           <div ref="faqChart" style="height: 350px"></div>
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :sm="24" :md="12">
         <el-card>
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center">
@@ -47,7 +47,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { getRoiReport } from '../api/roi'
@@ -61,6 +61,11 @@ const trendChart = ref()
 const categoryChart = ref()
 const faqChart = ref()
 const ticketChart = ref()
+const charts = []
+
+function handleResize() {
+  charts.forEach(c => c?.resize())
+}
 
 onMounted(async () => {
   await nextTick()
@@ -68,10 +73,17 @@ onMounted(async () => {
   initCategoryChart()
   initFaqChart()
   initTicketChart()
+  window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize)
+  charts.forEach(c => c?.dispose())
 })
 
 async function initTrendChart() {
   const chart = echarts.init(trendChart.value)
+  charts.push(chart)
   try {
     const res = await getRoiReport()
     const trend = res.data?.qa_trend || []
@@ -93,6 +105,7 @@ async function initTrendChart() {
 
 async function initCategoryChart() {
   const chart = echarts.init(categoryChart.value)
+  charts.push(chart)
   try {
     const res = await getCategoryStats()
     const categories = res.data || []
@@ -141,6 +154,7 @@ async function initCategoryChart() {
 
 async function initFaqChart() {
   const chart = echarts.init(faqChart.value)
+  charts.push(chart)
   try {
     const res = await getFaqs({ page_size: 10 })
     const faqs = res.data?.items || []
@@ -194,6 +208,7 @@ async function initFaqChart() {
 
 async function initTicketChart() {
   const chart = echarts.init(ticketChart.value)
+  charts.push(chart)
   try {
     const res = await getTicketStats()
     const d = res.data || {}

@@ -1,8 +1,8 @@
 <template>
   <el-card>
     <template #header><span style="font-weight: 600; color: #111827">问答历史</span></template>
-    <div style="display: flex; gap: 12px; margin-bottom: 16px">
-      <el-input v-model="keyword" placeholder="搜索问题或回答..." clearable style="width: 300px" @keyup.enter="fetchData" />
+    <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center">
+      <el-input v-model="keyword" placeholder="搜索问题或回答..." clearable style="flex: 1; min-width: 160px" @keyup.enter="fetchData" />
       <el-button type="primary" @click="fetchData">搜索</el-button>
       <el-checkbox v-model="onlyFavorite" @change="fetchData">仅收藏</el-checkbox>
     </div>
@@ -47,7 +47,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { Star } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getChatHistory, toggleFavorite, deleteHistory } from '../api/chatHistory'
@@ -58,6 +58,8 @@ const page = ref(1)
 const total = ref(0)
 const keyword = ref('')
 const onlyFavorite = ref(false)
+const isMobile = ref(window.innerWidth <= 768)
+function handleResize() { isMobile.value = window.innerWidth <= 768 }
 const detailVisible = ref(false)
 const detail = ref({})
 

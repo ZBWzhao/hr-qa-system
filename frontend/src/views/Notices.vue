@@ -1,7 +1,7 @@
 <template>
   <el-card>
     <template #header>
-      <div style="display: flex; justify-content: space-between; align-items: center">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
         <span style="font-weight: 600; color: #111827">通知公告</span>
         <el-button v-if="userStore.isHR" type="primary" @click="showDialog()">发布通知</el-button>
       </div>

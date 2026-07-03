@@ -1,7 +1,7 @@
 <template>
   <el-card>
     <template #header>
-      <div style="display: flex; justify-content: space-between; align-items: center">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
         <span style="font-weight: 600; color: #111827">工单系统</span>
         <el-button type="primary" @click="showCreate">创建工单</el-button>
       </div>

@@ -1,7 +1,7 @@
 <template>
   <el-card>
-    <div style="display: flex; gap: 16px; margin-bottom: 20px">
-      <el-input v-model="keyword" placeholder="输入关键词搜索制度文档..." size="large" clearable @keyup.enter="handleSearch" style="flex: 1" />
+    <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap">
+      <el-input v-model="keyword" placeholder="输入关键词搜索制度文档..." size="large" clearable @keyup.enter="handleSearch" style="flex: 1; min-width: 160px" />
       <el-select v-model="category" placeholder="全部分类" clearable size="large" style="width: 160px">
         <el-option label="考勤" value="attendance" />
         <el-option label="薪酬" value="salary" />
@@ -167,4 +167,13 @@ onMounted(() => {
 .result-title { font-size: 16px; font-weight: 600; color: #111827; margin-bottom: 8px; }
 .result-content { color: #6B7280; font-size: 14px; line-height: 1.6; }
 .result-content :deep(em) { color: #f5222d; font-style: normal; font-weight: 600; }
+
+@media (max-width: 768px) {
+  .doc-grid {
+    grid-template-columns: 1fr;
+  }
+  .hot-search {
+    padding: 20px 0 10px;
+  }
+}
 </style>

@@ -2,7 +2,7 @@
   <div>
     <!-- 顶部个人信息卡片 -->
     <el-card style="margin-bottom: 16px">
-      <div style="display: flex; align-items: center; gap: 16px">
+      <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
         <el-avatar :size="48" style="background: #D97706; color: #fff; font-size: 20px">
           {{ userStore.userInfo.real_name?.[0] || 'U' }}
         </el-avatar>

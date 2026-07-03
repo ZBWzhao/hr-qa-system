@@ -1,16 +1,16 @@
 <template>
   <div>
     <el-row :gutter="20" style="margin-bottom: 20px">
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card shadow="hover"><el-statistic title="本月问答量" :value="report.month_qa || 0" /></el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card shadow="hover"><el-statistic title="本月节省工时(h)" :value="report.month_saved_hours || 0" /></el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card shadow="hover"><el-statistic title="等效全职HR" :value="report.equivalent_fte || 0" /></el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <el-card shadow="hover"><el-statistic title="ROI百分比" :value="report.roi_percentage || 0" suffix="%" /></el-card>
       </el-col>
     </el-row>
