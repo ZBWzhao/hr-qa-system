@@ -66,7 +66,24 @@
           <el-avatar v-else :size="36" style="background: #D97706; color: #fff"><ChatDotRound /></el-avatar>
           <div class="message-content">
             <div class="message-bubble" :class="msg.role">
-              <div v-html="formatMessage(msg.content)"></div>
+              <!-- 工单确认卡片 -->
+              <div v-if="msg.answer_type === 'ticket_confirm' && msg.ticket_draft" class="ticket-confirm-card">
+                <div class="ticket-confirm-title">请确认以下工单信息：</div>
+                <div class="ticket-confirm-row">
+                  <span class="ticket-confirm-label">工单类型：</span>
+                  <span class="ticket-confirm-value">{{ msg.ticket_draft.title || '' }}</span>
+                </div>
+                <div v-for="(value, key) in msg.ticket_draft.fields" :key="key" class="ticket-confirm-row">
+                  <span class="ticket-confirm-label">{{ slotLabel(key) }}：</span>
+                  <span class="ticket-confirm-value">{{ value === true ? '是' : value === false ? '否' : value }}</span>
+                </div>
+                <div class="ticket-confirm-actions">
+                  <el-button type="primary" size="small" @click="confirmTicketSubmit(msg)">确认提交</el-button>
+                  <el-button size="small" @click="modifyTicket(msg)">继续修改</el-button>
+                </div>
+              </div>
+              <!-- 普通消息 -->
+              <div v-else v-html="formatMessage(msg.content)"></div>
             </div>
             <!-- 回答类型标签 -->
             <div v-if="msg.role === 'assistant' && msg.answer_type" class="answer-type-tag">
@@ -74,7 +91,8 @@
               <el-tag v-else-if="msg.answer_type === 'rule'" type="warning" size="small" effect="plain">规则答案</el-tag>
               <el-tag v-else-if="msg.answer_type === 'rag'" type="primary" size="small" effect="plain">已查阅制度文档</el-tag>
               <el-tag v-else-if="msg.answer_type === 'clarification'" type="info" size="small" effect="plain">需要补充信息</el-tag>
-              <el-tag v-else-if="msg.answer_type === 'ticket_form'" type="warning" size="small" effect="plain">工单申请</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'ticket_clarification'" type="warning" size="small" effect="plain">工单申请</el-tag>
+              <el-tag v-else-if="msg.answer_type === 'ticket_confirm'" type="warning" size="small" effect="plain">待确认工单</el-tag>
               <el-tag v-else-if="msg.answer_type === 'ticket_submitted'" type="success" size="small" effect="plain">工单已提交</el-tag>
               <el-tag v-else-if="msg.answer_type === 'notice_confirm'" type="info" size="small" effect="plain">待确认</el-tag>
               <el-tag v-else-if="msg.answer_type === 'notice_form'" type="primary" size="small" effect="plain">发布公告</el-tag>
@@ -97,7 +115,7 @@
               </el-button>
             </div>
             <!-- 操作按钮 -->
-            <div v-if="msg.role === 'assistant' && msg.record_id && !msg.ticket_confirm" class="message-actions">
+            <div v-if="msg.role === 'assistant' && msg.record_id && !['ticket_confirm', 'ticket_clarification'].includes(msg.answer_type)" class="message-actions">
               <el-button-group size="small">
                 <el-button @click="feedback(msg, 'useful')" :type="msg.feedback === 'useful' ? 'success' : ''"><el-icon><Select /></el-icon></el-button>
                 <el-button @click="feedback(msg, 'useless')" :type="msg.feedback === 'useless' ? 'danger' : ''"><el-icon><CloseBold /></el-icon></el-button>
@@ -133,35 +151,6 @@
       </div>
       <el-input v-model="notes" type="textarea" :autosize="false" placeholder="在这里记录笔记...&#10;&#10;可以记录对话要点、待办事项等" class="notes-textarea" />
     </div>
-
-    <!-- 工单表单对话框 -->
-    <el-dialog v-model="ticketDialogVisible" title="提交人工请求" width="500px" :close-on-click-modal="false">
-      <el-form :model="ticketForm" label-width="100px">
-        <el-form-item label="请求类型">
-          <el-select v-model="ticketForm.type" style="width: 100%">
-            <el-option label="证明开具" value="certify" />
-            <el-option label="信息变更" value="info_change" />
-            <el-option label="其他" value="other" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="标题">
-          <el-input v-model="ticketForm.title" placeholder="简要描述您的需求" />
-        </el-form-item>
-        <el-form-item label="具体原因">
-          <el-input v-model="ticketForm.reason" type="textarea" :rows="3" placeholder="请说明具体原因或用途" />
-        </el-form-item>
-        <el-form-item label="期望完成时间">
-          <el-input v-model="ticketForm.deadline" placeholder="例如：下周三之前" />
-        </el-form-item>
-        <el-form-item label="补充说明">
-          <el-input v-model="ticketForm.description" type="textarea" :rows="3" placeholder="其他需要补充的信息（可选）" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="ticketDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitTicketForm" :loading="ticketSubmitting">提交</el-button>
-      </template>
-    </el-dialog>
 
     <!-- 公告表单对话框 -->
     <el-dialog v-model="noticeDialogVisible" title="发布公告" width="600px" :close-on-click-modal="false">
@@ -254,55 +243,13 @@ function loadNotes(convId) { notes.value = localStorage.getItem(notesKey(convId)
 function saveNotes() { localStorage.setItem(notesKey(chatStore.currentConversationId), notes.value) }
 watch(notes, saveNotes)
 
-// ===== 工单引导 =====
-const ticketKeywords = [
-  '申请', '办理', '开具', '证明', '信息变更', '转人工', '联系HR',
-  '提交工单', '人工处理', '考勤异常', '工单', '提单', '求助HR',
-  '需要HR', '找HR', 'HR处理', '想开证明', '想办', '想申请',
-  '帮我申请', '帮我办理', '帮我开具', '帮我提交', '帮我处理',
-  '能不能申请', '能不能办理', '能不能开具', '可以申请', '可以办理',
-  '申请一份', '提交一份', '开一份', '办一个'
-]
-const ticketTypeMap = {
-  '证明': 'certify', '在职': 'certify', '开具': 'certify', '收入': 'certify',
-  '变更': 'info_change', '修改': 'info_change', '联系方式': 'info_change',
-  '考勤': 'other', '异常': 'other', '报销': 'other',
-}
-
-// 工单表单相关
-const ticketDialogVisible = ref(false)
-const ticketSubmitting = ref(false)
-const ticketForm = reactive({
-  type: 'other',
-  title: '',
-  reason: '',
-  deadline: '',
-  description: ''
-})
-
-function isTicketIntent(text) {
-  return ticketKeywords.some(kw => text.includes(kw))
-}
-
-function guessTicketType(text) {
-  for (const [kw, type] of Object.entries(ticketTypeMap)) {
-    if (text.includes(kw)) return type
-  }
-  return 'other'
-}
+// ===== 工单引导（已迁移至后端） =====
+// 工单意图识别、槽位提取、确认卡片均由后端处理
+// 前端只负责渲染 ticket_clarification / ticket_confirm / ticket_submitted 标签
 
 function triggerTicketFlow(question) {
   input.value = question
   sendMessage()
-}
-
-function openTicketDialog(type, title) {
-  ticketForm.type = type
-  ticketForm.title = title
-  ticketForm.reason = ''
-  ticketForm.deadline = ''
-  ticketForm.description = ''
-  ticketDialogVisible.value = true
 }
 
 // ===== 公告引导 =====
@@ -369,52 +316,6 @@ async function submitNoticeForm() {
   }
 }
 
-async function submitTicketForm() {
-  if (!ticketForm.title.trim()) {
-    ElMessage.warning('请填写标题')
-    return
-  }
-  if (!ticketForm.reason.trim()) {
-    ElMessage.warning('请填写具体原因')
-    return
-  }
-
-  ticketSubmitting.value = true
-  try {
-    // 构建描述信息
-    let description = `原因：${ticketForm.reason}`
-    if (ticketForm.deadline) description += `\n期望完成时间：${ticketForm.deadline}`
-    if (ticketForm.description) description += `\n补充说明：${ticketForm.description}`
-
-    const res = await createTicket({
-      type: ticketForm.type,
-      title: ticketForm.title,
-      description: description
-    })
-
-    const ticketNo = res.data?.ticket_no || '未知'
-    ticketDialogVisible.value = false
-
-    // 在聊天记录中添加提交成功的消息
-    chatStore.messages.push({
-      role: 'assistant',
-      content: `已提交人工请求，工单编号：${ticketNo}。你可以在"我的 - 人工请求"中查看处理进度。`,
-      answer_type: 'ticket_submitted',
-      source_docs: [],
-      record_id: null,
-      feedback: null,
-      is_favorite: false,
-    })
-    scrollToBottom()
-    ElMessage.success('工单已提交')
-    chatStore.fetchConversations()
-  } catch (e) {
-    ElMessage.error('提交失败，请稍后重试')
-  } finally {
-    ticketSubmitting.value = false
-  }
-}
-
 // ===== 澄清追问（已禁用，由后端处理） =====
 // 注意：澄清判断已移至后端 chat.py 处理
 // 前端不再负责业务逻辑判断
@@ -433,6 +334,37 @@ function formatMessage(text) {
 
 function docTitle(doc) {
   return doc.title || doc.question || doc.name || doc.faq_id ? ('FAQ #' + doc.faq_id) : doc.rule_id ? ('规则 #' + doc.rule_id) : doc.doc_id ? ('文档 #' + doc.doc_id) : '来源文档'
+}
+
+// 工单槽位标签映射
+function slotLabel(key) {
+  const labels = {
+    purpose: '证明用途',
+    receiver: '接收单位',
+    need_stamp: '是否需要盖章',
+    expected_time: '期望完成时间',
+    change_item: '变更信息类型',
+    old_value: '原信息',
+    new_value: '新信息',
+    reason: '变更原因',
+    exception_date: '异常日期',
+    exception_type: '异常类型',
+    description: '问题说明',
+    issue_type: '问题类型'
+  }
+  return labels[key] || key
+}
+
+// 确认提交工单
+async function confirmTicketSubmit(msg) {
+  input.value = '确认提交'
+  await sendMessage()
+}
+
+// 继续修改工单
+async function modifyTicket(msg) {
+  input.value = '继续修改'
+  await sendMessage()
 }
 
 function focusInput() {
@@ -925,6 +857,14 @@ onMounted(async () => {
 .answer-type-tag { margin-top: 6px; }
 .source-docs { margin-top: 8px; }
 .miss-actions { margin-top: 10px; display: flex; gap: 8px; }
+
+/* 工单确认卡片 */
+.ticket-confirm-card { font-size: 14px; }
+.ticket-confirm-title { font-weight: 600; margin-bottom: 12px; color: #111827; }
+.ticket-confirm-row { margin-bottom: 8px; line-height: 1.6; }
+.ticket-confirm-label { color: #6B7280; }
+.ticket-confirm-value { color: #111827; font-weight: 500; }
+.ticket-confirm-actions { margin-top: 16px; display: flex; gap: 8px; }
 
 /* 加载动画 */
 .loading-bubble { display: flex; gap: 6px; align-items: center; }

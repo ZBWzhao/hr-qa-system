@@ -11,11 +11,14 @@ from app.schemas.qa import ChatRequest, ChatResponse
 from app.models.qa import QARecord, FAQ, Rule, QAMiss
 from app.models.document import Document, DocumentChunk
 from app.models.user import User
+from app.models.ticket import Ticket
 from app.services.rag.vectorstore import search_similar
 from app.services.llm import generate_answer, analyze_intent, generate_clarification
 from app.services.text_splitter import extract_keywords
 from app.services.conversation_state_service import ConversationStateService
 from app.services.slot_extractor import extract_slots_for_intent
+from app.services.ticket_intent_service import detect_ticket_intent, TICKET_SLOT_CONFIG
+from app.services.ticket_slot_extractor import extract_ticket_slots
 
 router = APIRouter()
 
@@ -256,6 +259,342 @@ def handle_pending_intent(question: str, state, user_id: int, db: Session) -> di
     return None
 
 
+def handle_ticket_create(question: str, conv_id: str, user_id: int, db: Session) -> dict:
+    """
+    处理工单创建：识别工单意图，设置 pending_intent，返回澄清
+    """
+    intent_result = detect_ticket_intent(question)
+
+    if not intent_result["is_ticket_intent"]:
+        return None
+
+    ticket_type = intent_result["ticket_type"]
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+
+    # 尝试从第一轮提取已有字段
+    slots = extract_ticket_slots(question, ticket_type)
+
+    # 构建 filled_slots，包含 ticket_type 和 title
+    filled_slots = {
+        "ticket_type": ticket_type,
+        "title": config["title"],
+        "display_type": config["display_type"]
+    }
+    filled_slots.update(slots)
+
+    # 保存状态
+    state_service = ConversationStateService(db)
+    state_service.set_pending_intent(
+        user_id=user_id,
+        conversation_id=conv_id,
+        intent="ticket_create",
+        required_slots=config["required_slots"]
+    )
+
+    # 始终更新已填充的槽位（包含 ticket_type 等元数据）
+    state_service.update_filled_slots(user_id, conv_id, filled_slots)
+
+    # 检查是否所有槽位都已填充
+    if state_service.check_slots_filled(user_id, conv_id):
+        # 槽位齐全，直接返回确认卡片
+        return _build_ticket_confirm(question, conv_id, user_id, db, ticket_type, state_service)
+
+    # 生成追问内容
+    missing_slots = [s for s in config["required_slots"] if s not in filled_slots]
+    answer = f"好的，我来帮您提交「{config['display_type']}」申请。\n\n"
+
+    if missing_slots:
+        answer += "还需要补充以下信息：\n"
+        for i, slot in enumerate(missing_slots, 1):
+            label = config["slot_labels"].get(slot, slot)
+            answer += f"{i}. {label}\n"
+
+    # 保存问答记录
+    record = QARecord(
+        user_id=user_id,
+        question=question,
+        answer=answer,
+        answer_type="ticket_clarification",
+        source_docs=json.dumps([]),
+        conversation_id=conv_id
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return success({
+        "answer": answer,
+        "answer_type": "ticket_clarification",
+        "intent": "ticket_create",
+        "ticket_type": ticket_type,
+        "source_docs": [],
+        "record_id": record.id,
+        "conversation_id": conv_id,
+        "required_slots": config["required_slots"],
+        "filled_slots": filled_slots,
+        "actions": []
+    })
+
+
+def handle_ticket_pending(question: str, state, user_id: int, db: Session) -> dict:
+    """
+    处理工单槽位补充
+    """
+    state_service = ConversationStateService(db)
+    conv_id = state.conversation_id
+
+    # 从 filled_slots 中读取 ticket_type
+    try:
+        filled = json.loads(state.filled_slots) if state.filled_slots else {}
+    except:
+        filled = {}
+
+    ticket_type = filled.get("ticket_type", "other")
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+
+    # 检查是否是确认提交
+    confirm_words = ['确认', '确认提交', '可以', '是的', '提交吧', '没问题', '确定', '提交', '好的']
+    if question.strip() in confirm_words or question.strip().lower() in ['ok', 'yes']:
+        return handle_ticket_confirm(question, state, user_id, db)
+
+    # 检查是否是继续修改
+    if question.strip() in ['继续修改', '修改', '我要修改']:
+        answer = "好的，请说明你想修改哪一项，例如：\n"
+        answer += "- 「接收单位改成XX」\n"
+        answer += "- 「期望时间改为下周一前」\n"
+        answer += "- 或者重新补充完整信息"
+
+        record = QARecord(
+            user_id=user_id,
+            question=question,
+            answer=answer,
+            answer_type="ticket_clarification",
+            source_docs=json.dumps([]),
+            conversation_id=conv_id
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+
+        return success({
+            "answer": answer,
+            "answer_type": "ticket_clarification",
+            "intent": "ticket_create",
+            "ticket_type": ticket_type,
+            "source_docs": [],
+            "record_id": record.id,
+            "conversation_id": conv_id,
+            "required_slots": config["required_slots"],
+            "filled_slots": filled,
+            "actions": []
+        })
+
+    # 提取槽位
+    slots = extract_ticket_slots(question, ticket_type)
+
+    # 合并槽位
+    for key, value in slots.items():
+        if value is not None and value != "" and value != 0:
+            filled[key] = value
+
+    # 更新 filled_slots
+    state_service.update_filled_slots(user_id, conv_id, filled)
+
+    # 检查是否所有槽位都已填充
+    if state_service.check_slots_filled(user_id, conv_id):
+        # 槽位齐全，返回确认卡片
+        return _build_ticket_confirm(question, conv_id, user_id, db, ticket_type, state_service)
+
+    # 继续追问缺失字段
+    missing_slots = [s for s in config["required_slots"] if s not in filled]
+    answer = "还需要补充以下信息：\n"
+    for i, slot in enumerate(missing_slots, 1):
+        label = config["slot_labels"].get(slot, slot)
+        answer += f"{i}. {label}\n"
+
+    record = QARecord(
+        user_id=user_id,
+        question=question,
+        answer=answer,
+        answer_type="ticket_clarification",
+        source_docs=json.dumps([]),
+        conversation_id=conv_id
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return success({
+        "answer": answer,
+        "answer_type": "ticket_clarification",
+        "intent": "ticket_create",
+        "ticket_type": ticket_type,
+        "source_docs": [],
+        "record_id": record.id,
+        "conversation_id": conv_id,
+        "required_slots": config["required_slots"],
+        "filled_slots": filled,
+        "actions": []
+    })
+
+
+def _build_ticket_confirm(question: str, conv_id: str, user_id: int, db: Session, ticket_type: str, state_service: ConversationStateService) -> dict:
+    """构建工单确认卡片"""
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+    filled = state_service.get_filled_slots(user_id, conv_id)
+
+    # 构建描述
+    desc_parts = []
+    for slot in config["required_slots"]:
+        label = config["slot_labels"].get(slot, slot)
+        value = filled.get(slot, "")
+        if slot == "need_stamp":
+            value = "是" if value else "否"
+        if value:
+            desc_parts.append(f"{label}：{value}")
+
+    description = "\n".join(desc_parts)
+
+    # 构建确认回答
+    answer = f"请确认以下工单信息：\n\n"
+    answer += f"**工单类型：** {config['display_type']}\n"
+    answer += f"**标题：** {config['title']}\n"
+    for slot in config["required_slots"]:
+        label = config["slot_labels"].get(slot, slot)
+        value = filled.get(slot, "")
+        if slot == "need_stamp":
+            value = "是" if value else "否"
+        if value:
+            answer += f"**{label}：** {value}\n"
+    answer += f"\n确认提交给 HR 吗？"
+
+    # 更新状态为 waiting_for_confirm
+    state_service.update_last_answer_type(user_id, conv_id, "ticket_confirm")
+    state = state_service.get_or_create_state(user_id, conv_id)
+    state.status = "waiting_for_confirm"
+    db.commit()
+
+    # 保存问答记录
+    record = QARecord(
+        user_id=user_id,
+        question=question,
+        answer=answer,
+        answer_type="ticket_confirm",
+        source_docs=json.dumps([]),
+        conversation_id=conv_id
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return success({
+        "answer": answer,
+        "answer_type": "ticket_confirm",
+        "intent": "ticket_create",
+        "ticket_type": ticket_type,
+        "source_docs": [],
+        "record_id": record.id,
+        "conversation_id": conv_id,
+        "required_slots": [],
+        "filled_slots": filled,
+        "ticket_draft": {
+            "type": ticket_type,
+            "title": config["title"],
+            "description": description,
+            "fields": {k: v for k, v in filled.items() if k not in ["ticket_type", "title", "display_type"]}
+        },
+        "actions": [
+            {"type": "confirm_submit", "label": "确认提交"},
+            {"type": "modify", "label": "继续修改"}
+        ]
+    })
+
+
+def handle_ticket_confirm(question: str, state, user_id: int, db: Session) -> dict:
+    """
+    处理工单确认提交
+    """
+    state_service = ConversationStateService(db)
+    conv_id = state.conversation_id
+
+    # 从 filled_slots 读取信息
+    try:
+        filled = json.loads(state.filled_slots) if state.filled_slots else {}
+    except:
+        filled = {}
+
+    ticket_type = filled.get("ticket_type", "other")
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+
+    # 构建工单描述
+    desc_parts = []
+    for slot in config["required_slots"]:
+        label = config["slot_labels"].get(slot, slot)
+        value = filled.get(slot, "")
+        if slot == "need_stamp":
+            value = "是" if value else "否"
+        if value:
+            desc_parts.append(f"{label}：{value}")
+
+    description = "\n".join(desc_parts)
+
+    # 生成工单编号
+    ticket_count = db.query(Ticket).count()
+    ticket_no = f"TK{datetime.now().strftime('%Y%m%d')}{ticket_count + 1:04d}"
+
+    # 创建工单
+    ticket = Ticket(
+        ticket_no=ticket_no,
+        type=ticket_type,
+        title=config["title"],
+        description=description,
+        status="pending",
+        creator_id=user_id,
+        conversation_id=conv_id
+    )
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+
+    # 清空 pending_intent
+    state_service.clear_pending_intent(user_id, conv_id)
+
+    # 生成回答
+    answer = f"已提交人工请求，工单编号：**{ticket_no}**。\n\n"
+    answer += f"你可以在「我的 - 人工请求」中查看处理进度。"
+
+    # 保存问答记录
+    record = QARecord(
+        user_id=user_id,
+        question=question,
+        answer=answer,
+        answer_type="ticket_submitted",
+        source_docs=json.dumps([]),
+        conversation_id=conv_id
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return success({
+        "answer": answer,
+        "answer_type": "ticket_submitted",
+        "intent": "ticket_create",
+        "ticket_type": ticket_type,
+        "source_docs": [],
+        "record_id": record.id,
+        "conversation_id": conv_id,
+        "required_slots": [],
+        "filled_slots": {},
+        "ticket": {
+            "ticket_id": ticket.id,
+            "ticket_no": ticket_no,
+            "status": "pending"
+        },
+        "actions": []
+    })
+
+
 def match_faq(db: Session, question: str):
     """关键词匹配FAQ，不调用API"""
     keywords = extract_keywords(question)
@@ -414,12 +753,33 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
 
     # Step 4: 【第一优先级】检查 pending_intent
     if state.pending_intent:
-        result = handle_pending_intent(question, state, current_user.id, db)
-        if result:
-            return result
-        # 如果 handle_pending_intent 返回 None，说明是未知的 pending_intent，继续走正常流程
+        # 工单待确认状态
+        if state.pending_intent == "ticket_create" and state.status == "waiting_for_confirm":
+            result = handle_ticket_confirm(question, state, current_user.id, db)
+            if result:
+                return result
 
-    # Step 5: 【第二优先级】判断是否需要年假澄清
+        # 工单槽位补充状态
+        if state.pending_intent == "ticket_create":
+            result = handle_ticket_pending(question, state, current_user.id, db)
+            if result:
+                return result
+
+        # 年假补充信息状态
+        if state.pending_intent == "annual_leave_calculation":
+            result = handle_pending_intent(question, state, current_user.id, db)
+            if result:
+                return result
+
+        # 其他未知的 pending_intent，清空并走正常流程
+        state_service.clear_pending_intent(current_user.id, conv_id)
+
+    # Step 5: 【第二优先级】判断是否是工单意图
+    ticket_result = handle_ticket_create(question, conv_id, current_user.id, db)
+    if ticket_result:
+        return ticket_result
+
+    # Step 6: 【第三优先级】判断是否需要年假澄清
     if is_annual_leave_days_question(question):
         # 检查是否同时提供了工龄信息（用户可能一次性说完）
         slots = extract_slots_for_intent(question, "annual_leave_calculation")
@@ -475,7 +835,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             # 用户没有提供工龄信息，进入澄清流程
             return handle_annual_leave_clarification(question, conv_id, current_user.id, db)
 
-    # Step 6: 【原有逻辑】关键词匹配FAQ
+    # Step 7: 【原有逻辑】关键词匹配FAQ
     context = get_conversation_context(db, current_user.id, conv_id)
 
     faq = match_faq(db, question)
@@ -506,7 +866,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "actions": []
         })
 
-    # Step 7: 【原有逻辑】关键词匹配规则
+    # Step 8: 【原有逻辑】关键词匹配规则
     rule = match_rule(db, question)
     if rule:
         answer = f"我理解您的问题，根据公司相关规则查询：\n\n"
@@ -534,7 +894,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "actions": []
         })
 
-    # Step 8: 【原有逻辑】RAG搜索 + AI生成
+    # Step 9: 【原有逻辑】RAG搜索 + AI生成
     answer, sources, confidence = rag_search_and_generate(question, context)
 
     if confidence == "need_clarification":
@@ -588,7 +948,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             "actions": []
         })
 
-    # Step 9: 【原有逻辑】高置信度回答
+    # Step 10: 【原有逻辑】高置信度回答
     record = QARecord(
         user_id=current_user.id,
         question=question,

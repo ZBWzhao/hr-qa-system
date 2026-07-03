@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class ChatRequest(BaseModel):
     question: str
     conversation_id: Optional[str] = None
+    action: Optional[str] = None  # 可选操作：confirm_submit, modify
 
 
 class ChatResponse(BaseModel):

@@ -17,5 +17,7 @@ class Ticket(Base):
     assignee_id = Column(Integer, ForeignKey("sys_user.id"), nullable=True)
     resolve_note = Column(Text, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
+    conversation_id = Column(String(64), nullable=True)  # 关联聊天会话
+    qa_record_id = Column(Integer, nullable=True)  # 关联触发工单的问答记录
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
