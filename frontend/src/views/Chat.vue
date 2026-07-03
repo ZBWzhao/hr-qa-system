@@ -415,33 +415,10 @@ async function submitTicketForm() {
   }
 }
 
-// ===== 澄清追问 =====
+// ===== 澄清追问（已禁用，由后端处理） =====
+// 注意：澄清判断已移至后端 chat.py 处理
+// 前端不再负责业务逻辑判断
 function needsClarification(text) {
-  // 1. 问题太短（少于4个字）
-  if (text.length < 4) return true
-
-  // 2. 指代不明（但要排除有上下文的情况）
-  const vagueReferences = ["这个东西", "那个东西", "这个事情", "那个事情"]
-  // 简单的"这个"、"那个"如果后面跟了动词，可能是有明确意图的
-  if (vagueReferences.some(ref => text.includes(ref))) return true
-
-  // 3. 纯粹的模糊请求（只有动词没有对象，且不是工单相关）
-  const isTicketRelated = ['工单', '申请', '办理', '开具', '证明', '提单'].some(kw => text.includes(kw))
-  if (!isTicketRelated) {
-    const vagueRequests = ["怎么办", "怎么弄", "怎么做"]
-    if (vagueRequests.some(req => text === req || text === req + '?')) return true
-  }
-
-  // 4. 纯粹的代词请求
-  if (["帮我", "告诉我", "解释一下", "说一下"].some(req => text === req || text === req + '?')) return true
-
-  // 5. 年假查询但没有提供工龄信息
-  if (text.includes('年假') && ['几天', '多少天'].some(kw => text.includes(kw))) {
-    if (!['入职', '工龄', '工作满', '几年', '年限'].some(kw => text.includes(kw))) {
-      return true
-    }
-  }
-
   return false
 }
 
@@ -532,76 +509,55 @@ async function sendMessage() {
   chatStore.messages.push({ role: 'user', content: q })
   scrollToBottom()
 
-  // 前端拦截：检测是否是补充信息（入职时间、工龄等）
-  const isSupplementInfo = ['入职', '工龄', '年限', '工作满', '工作年限', '入职时间', '入职日期'].some(kw => q.includes(kw))
-  if (isSupplementInfo) {
-    // 尝试提取工龄
-    let years = 0
-    const yearMatch = q.match(/(\d+)\s*年/)
-    if (yearMatch) {
-      years = parseInt(yearMatch[1])
+  // 调用后端 API，让后端处理所有业务逻辑
+  loading.value = true
+  try {
+    const res = await sendChat({ question: q, conversation_id: chatStore.currentConversationId })
+    const data = res.data
+
+    // 保存后端返回的 conversation_id
+    if (data.conversation_id) {
+      chatStore.currentConversationId = data.conversation_id
     }
 
-    // 如果没有直接的年数，尝试从入职日期计算
-    if (years === 0) {
-      const dateMatch = q.match(/(\d{4})[.\-/年](\d{1,2})[.\-/月](\d{1,2})?/)
-      if (dateMatch) {
-        const joinYear = parseInt(dateMatch[1])
-        const currentYear = new Date().getFullYear()
-        years = currentYear - joinYear
-      }
-    }
-
-    // 计算年假天数
-    let annualLeave = 0
-    if (years >= 1 && years < 10) {
-      annualLeave = 5
-    } else if (years >= 10 && years < 20) {
-      annualLeave = 10
-    } else if (years >= 20) {
-      annualLeave = 15
-    }
-
-    let answer = ''
-    if (annualLeave > 0) {
-      answer = `根据您提供的信息，您的工龄约为 **${years}年**。\n\n`
-      answer += `按照公司年假制度：\n`
-      answer += `- 工龄1-10年：5天年假\n`
-      answer += `- 工龄10-20年：10天年假\n`
-      answer += `- 工龄20年以上：15天年假\n\n`
-      answer += `**您目前享有 ${annualLeave} 天年假。**\n\n`
-      answer += `温馨提示：年假需提前申请，请合理安排。`
-    } else {
-      answer = `感谢您提供的信息。根据您的情况，我需要确认更多细节才能准确计算年假天数。\n\n建议您联系HR部门确认具体的年假天数。`
-    }
-
+    // 渲染后端返回的回答
     chatStore.messages.push({
       role: 'assistant',
-      content: answer,
-      answer_type: 'faq',
-      source_docs: [],
-      record_id: null,
+      content: data.answer,
+      answer_type: data.answer_type,
+      intent: data.intent || null,
+      source_docs: data.source_docs || [],
+      required_slots: data.required_slots || [],
+      filled_slots: data.filled_slots || {},
+      actions: data.actions || [],
+      record_id: data.record_id,
       feedback: null,
       is_favorite: false,
     })
-    scrollToBottom()
-    // 保存到后端
-    saveChatRecord({
-      question: q,
-      answer: answer,
-      answer_type: 'faq',
-      conversation_id: chatStore.currentConversationId
-    }).then(res => {
-      if (res.data?.conversation_id) {
-        chatStore.currentConversationId = res.data.conversation_id
-        chatStore.fetchConversations()
+
+    // 更新URL和会话列表
+    const convId = data.conversation_id
+    if (convId && route.params.conversationId !== convId) {
+      const draftNotes = localStorage.getItem(notesKey(null)) || ''
+      if (draftNotes && !localStorage.getItem(notesKey(convId))) {
+        localStorage.setItem(notesKey(convId), draftNotes)
+        localStorage.removeItem(notesKey(null))
       }
-    }).catch(() => {})
-    return
+      router.replace('/chat/' + convId)
+    }
+    chatStore.fetchConversations()
+  } catch (e) {
+    chatStore.messages.push({ role: 'assistant', content: '抱歉，发生了错误，请稍后重试。' })
+  } finally {
+    loading.value = false
+    scrollToBottom()
   }
 
+  return
+
+  // 以下是保留的工单和公告逻辑（不执行，仅保留代码结构）
   // 前端拦截：澄清追问
-  if (needsClarification(q)) {
+  if (false && needsClarification(q)) {
     let answer = ''
 
     // 根据不同类型生成不同的澄清提示

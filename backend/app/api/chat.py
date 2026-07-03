@@ -226,12 +226,13 @@ def handle_pending_intent(question: str, state, user_id: int, db: Session) -> di
         state_service.clear_pending_intent(user_id, conv_id)
 
         # 保存问答记录
+        # TODO: 后续升级为 rag，关联《休假与年假管理办法》文档
         record = QARecord(
             user_id=user_id,
             question=question,
             answer=answer,
-            answer_type="faq",
-            source_docs=json.dumps([{"source": "年假制度"}]),
+            answer_type="rule",
+            source_docs=json.dumps([{"source": "年假制度", "document": "休假与年假管理办法"}]),
             conversation_id=conv_id
         )
         db.add(record)
@@ -240,9 +241,9 @@ def handle_pending_intent(question: str, state, user_id: int, db: Session) -> di
 
         return success({
             "answer": answer,
-            "answer_type": "faq",
+            "answer_type": "rule",
             "intent": "annual_leave_calculation",
-            "source_docs": [{"source": "年假制度"}],
+            "source_docs": [{"source": "年假制度", "document": "休假与年假管理办法"}],
             "record_id": record.id,
             "conversation_id": conv_id,
             "required_slots": [],
@@ -446,12 +447,13 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
                 answer += f"**您目前享有 {annual_leave} 天年假。**\n\n"
                 answer += "温馨提示：年假需提前申请，请合理安排。"
 
+            # TODO: 后续升级为 rag，关联《休假与年假管理办法》文档
             record = QARecord(
                 user_id=current_user.id,
                 question=question,
                 answer=answer,
-                answer_type="faq",
-                source_docs=json.dumps([{"source": "年假制度"}]),
+                answer_type="rule",
+                source_docs=json.dumps([{"source": "年假制度", "document": "休假与年假管理办法"}]),
                 conversation_id=conv_id
             )
             db.add(record)
@@ -460,9 +462,9 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
 
             return success({
                 "answer": answer,
-                "answer_type": "faq",
+                "answer_type": "rule",
                 "intent": "annual_leave_calculation",
-                "source_docs": [{"source": "年假制度"}],
+                "source_docs": [{"source": "年假制度", "document": "休假与年假管理办法"}],
                 "record_id": record.id,
                 "conversation_id": conv_id,
                 "required_slots": [],
