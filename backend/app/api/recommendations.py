@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.response import success
-from app.models.qa import FAQ, QARecord
+from app.models.qa import QARecord
+from app.models.document import Document
 from app.models.user import User
 
 router = APIRouter()
@@ -11,19 +12,24 @@ router = APIRouter()
 
 @router.get("")
 def get_recommendations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    hot_faqs = db.query(FAQ).filter(FAQ.status == 1).order_by(FAQ.view_count.desc()).limit(5).all()
-    user_questions = db.query(QARecord).filter(QARecord.user_id == current_user.id).order_by(QARecord.created_at.desc()).limit(3).all()
+    hot_docs = (
+        db.query(Document)
+        .filter(Document.status == "published")
+        .order_by(Document.updated_at.desc())
+        .limit(5)
+        .all()
+    )
 
     recommendations = []
-    for faq in hot_faqs:
-        recommendations.append({"type": "faq", "question": faq.question, "faq_id": faq.id})
+    for doc in hot_docs:
+        recommendations.append({"type": "document", "question": f"《{doc.title}》主要内容是什么？", "doc_id": doc.id})
 
     default_questions = [
         "年假怎么计算？",
         "请假需要提前多久申请？",
         "报销流程是什么？",
         "试用期多久？",
-        "绩效申诉怎么提交？"
+        "绩效申诉怎么提交？",
     ]
     existing = set(r["question"] for r in recommendations)
     for q in default_questions:

@@ -18,22 +18,6 @@ class QARecord(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.now)
 
 
-class FAQ(Base):
-    __tablename__ = "qa_faq"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    question = Column(String(500), nullable=False)
-    answer = Column(Text, nullable=False)
-    category = Column(String(50), nullable=True)
-    keywords = Column(String(500), nullable=True)
-    view_count = Column(Integer, nullable=False, default=0)
-    sort_order = Column(Integer, nullable=False, default=0)
-    status = Column(SmallInteger, nullable=False, default=1)
-    created_by = Column(Integer, ForeignKey("sys_user.id"), nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
-    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
-
-
 class Rule(Base):
     __tablename__ = "qa_rule"
 
@@ -60,6 +44,8 @@ class QAFeedback(Base):
     status = Column(String(20), nullable=False, default="pending")
     handler_id = Column(Integer, ForeignKey("sys_user.id"), nullable=True)
     handle_note = Column(Text, nullable=True)
+    ai_suggestion = Column(Text, nullable=True)
+    ai_suggestion_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     handled_at = Column(DateTime, nullable=True)
 

@@ -311,6 +311,23 @@ def expand_clarification_choice(question: str, context: Dict[str, Any]) -> Dict[
             "context_used": True,
         }
 
+    last_q = " ".join(context.get("recent_user_questions", [])[-2:])
+    if "入职准备" in last_q or "入职要做" in last_q or "入职准备" in (context.get("last_answer_summary") or ""):
+        if any(k in q for k in ("HR准备", "部门准备")) or q.strip() in ("HR", "1"):
+            return {
+                "is_followup": True,
+                "resolved_question": "HR部门在员工入职前需要做哪些准备工作？",
+                "inherited_topic": "onboarding",
+                "context_used": True,
+            }
+        if any(k in q for k in ("新员工准备", "员工准备", "本人准备")) or q.strip() == "2":
+            return {
+                "is_followup": True,
+                "resolved_question": "新员工入职需要准备什么材料和注意事项？",
+                "inherited_topic": "onboarding",
+                "context_used": True,
+            }
+
     return {}
 
 
@@ -897,6 +914,20 @@ def rewrite_followup_question(question: str, context: Dict[str, Any]) -> Dict[st
             "context_used": True,
             "is_ticket_question": True,
         }
+
+    # 日期/时间追问：「7月6日呢」「那么7月6日呢」
+    date_match = re.search(r'(\d{1,2})\s*月\s*(\d{1,2})\s*日', q)
+    context_blob = f"{last_question} {context.get('last_answer_summary', '')}"
+    time_keywords = ('下班', '上班', '考勤', '工作时间', '调整', '提前', '几点')
+    if date_match and ('呢' in q or len(q) <= 28):
+        mm, dd = date_match.group(1), date_match.group(2)
+        if any(kw in q + context_blob for kw in time_keywords) or topic == "attendance":
+            return {
+                "is_followup": True,
+                "resolved_question": f"{mm}月{dd}日下班时间是几点？",
+                "inherited_topic": "attendance",
+                "context_used": True,
+            }
 
     # 无明确主题的可疑短追问 → 澄清
     if topic in ("general", "") and (is_year_number_followup(q) or is_vague_pronoun_followup(q)):

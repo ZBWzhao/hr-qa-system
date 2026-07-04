@@ -24,7 +24,7 @@ const routes = [
       { path: 'chat/:conversationId', name: 'ChatConversation', component: () => import('../views/Chat.vue'), meta: { title: '智能问答' } },
       { path: 'search', name: 'Search', component: () => import('../views/Search.vue'), meta: { title: '关键词搜索' } },
       { path: 'documents', name: 'Documents', component: () => import('../views/Documents.vue'), meta: { title: '制度文档', roles: ['hr', 'admin'] } },
-      { path: 'faqs', name: 'FAQs', component: () => import('../views/FAQs.vue'), meta: { title: '标准答案库' } },
+      { path: 'faqs', redirect: '/knowledge' },
       { path: 'knowledge', name: 'KnowledgeManage', component: () => import('../views/KnowledgeManage.vue'), meta: { title: '知识管理', roles: ['hr', 'admin'] } },
       { path: 'rules', name: 'Rules', component: () => import('../views/Rules.vue'), meta: { title: '规则问答', roles: ['hr'] } },
       { path: 'history', name: 'ChatHistory', component: () => import('../views/ChatHistory.vue'), meta: { title: '问答历史' } },
@@ -52,7 +52,7 @@ const router = createRouter({
 })
 
 // admin 只能访问的页面白名单
-const adminAllowed = ['/documents', '/user-management', '/department-management', '/profile', '/notices', '/tickets', '/feedback', '/faqs', '/statistics', '/knowledge', '/todo']
+const adminAllowed = ['/documents', '/user-management', '/department-management', '/profile', '/notices', '/tickets', '/feedback', '/statistics', '/knowledge', '/todo']
 
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')

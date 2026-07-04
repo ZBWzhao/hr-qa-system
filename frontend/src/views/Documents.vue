@@ -159,7 +159,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, Search, Loading, Download } from '@element-plus/icons-vue'
-import { getDocuments, createDocument, updateDocument, deleteDocument, publishDocument, archiveDocument, getDocument, classifyDocument } from '../api/documents'
+import { getDocuments, createDocument, updateDocument, deleteDocument, publishDocument, archiveDocument, unarchiveDocument, getDocument, classifyDocument, downloadDocument } from '../api/documents'
 import { useUserStore } from '../stores/user'
 
 const route = useRoute()
@@ -186,23 +186,26 @@ function highlightTitle(title) {
   return title.replace(regex, '<em style="color: #f5222d; font-style: normal; font-weight: 600">$1</em>')
 }
 
-// 下载附件
-function downloadFile(doc) {
+// 下载附件（带 Token）
+async function downloadFile(doc) {
   if (!doc.file_path) {
     ElMessage.warning('该文档没有附件')
     return
   }
-  // 构建下载链接
   const fileName = doc.file_path.split('/').pop()?.split('\\').pop() || '附件'
-  const downloadUrl = `/api/v1/documents/${doc.id}/download`
-
-  // 创建临时链接触发下载
-  const link = document.createElement('a')
-  link.href = downloadUrl
-  link.download = fileName
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
+  try {
+    const blob = await downloadDocument(doc.id)
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (e) {
+    ElMessage.error('下载失败，请稍后重试')
+  }
 }
 
 function categoryLabel(c) {
@@ -282,6 +285,12 @@ async function autoClassify(file) {
     if (res.data?.category) {
       form.category = res.data.category
       categoryConfidence.value = res.data.confidence || 0
+    }
+    if (res.data?.content_text && !form.content_text) {
+      form.content_text = res.data.content_text
+    }
+    if (res.data?.suggested_title && !form.title) {
+      form.title = res.data.suggested_title
     }
   } catch (e) {
     // 分类失败不影响上传

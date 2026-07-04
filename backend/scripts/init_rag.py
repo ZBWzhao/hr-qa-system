@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.core.database import SessionLocal, engine, Base
 from app.models.document import Document, DocumentChunk
 from app.models.user import User
-from app.models.qa import QARecord, FAQ, Rule, QAMiss
+from app.models.qa import QARecord, Rule, QAMiss
 from app.services.text_splitter import chunk_document
 from app.services.rag.vectorstore import add_documents, delete_document, get_collection_stats
 
@@ -75,14 +75,12 @@ def show_stats():
         doc_count = db.query(Document).count()
         published_count = db.query(Document).filter(Document.status == "published").count()
         chunk_count = db.query(DocumentChunk).count()
-        faq_count = db.query(FAQ).filter(FAQ.status == 1).count()
         rule_count = db.query(Rule).filter(Rule.status == 1).count()
         qa_count = db.query(QARecord).count()
         miss_count = db.query(QAMiss).count()
 
         print(f"文档总数: {doc_count} (已发布: {published_count})")
         print(f"文档切片: {chunk_count}")
-        print(f"FAQ数量: {faq_count}")
         print(f"规则数量: {rule_count}")
         print(f"问答记录: {qa_count}")
         print(f"未命中问题: {miss_count}")

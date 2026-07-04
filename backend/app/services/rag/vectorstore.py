@@ -72,7 +72,18 @@ def search_similar(query: str, top_k: int = 5) -> list[dict]:
 def delete_document(doc_id: int):
     collection = get_collection()
     try:
+        # 兼容不同 metadata 类型
         collection.delete(where={"doc_id": doc_id})
+    except Exception:
+        try:
+            collection.delete(where={"doc_id": str(doc_id)})
+        except Exception:
+            pass
+    try:
+        prefix = f"doc_{doc_id}_chunk_"
+        existing = collection.get(where={"doc_id": doc_id})
+        if existing and existing.get("ids"):
+            collection.delete(ids=existing["ids"])
     except Exception:
         pass
 

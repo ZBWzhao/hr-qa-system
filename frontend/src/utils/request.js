@@ -17,6 +17,21 @@ request.interceptors.request.use(config => {
 
 request.interceptors.response.use(
   response => {
+    if (response.config.responseType === 'blob') {
+      const blob = response.data
+      if (blob?.type === 'application/json') {
+        return blob.text().then(text => {
+          try {
+            const res = JSON.parse(text)
+            ElMessage.error(res.message || '下载失败')
+          } catch {
+            ElMessage.error('下载失败')
+          }
+          return Promise.reject(new Error('download failed'))
+        })
+      }
+      return blob
+    }
     const res = response.data
     if (res.code !== 0) {
       if (res.code === 401) {

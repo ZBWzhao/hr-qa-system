@@ -116,6 +116,8 @@ class FeedbackOut(BaseModel):
     status: str
     handler_id: Optional[int] = None
     handle_note: Optional[str] = None
+    ai_suggestion: Optional[str] = None
+    ai_suggestion_at: Optional[datetime] = None
     created_at: datetime
     handled_at: Optional[datetime] = None
 

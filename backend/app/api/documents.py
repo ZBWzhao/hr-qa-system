@@ -156,7 +156,7 @@ def classify_document(file: UploadFile = File(...)):
         return error(f"文件读取失败: {str(e)}")
 
     if not content.strip():
-        return success({"category": "other", "confidence": 0})
+        return success({"category": "other", "confidence": 0, "content_text": "", "suggested_title": ""})
 
     # 分类关键词映射
     category_keywords = {
@@ -174,12 +174,28 @@ def classify_document(file: UploadFile = File(...)):
 
     total = sum(scores.values())
     if total == 0:
-        return success({"category": "other", "confidence": 0})
+        preview = content.strip()
+        if len(preview) > 8000:
+            preview = preview[:8000]
+        return success({
+            "category": "other",
+            "confidence": 0,
+            "content_text": preview,
+            "suggested_title": (file.filename or "").rsplit(".", 1)[0] if file.filename else "",
+        })
 
     best_cat = max(scores, key=scores.get)
     confidence = round(scores[best_cat] / total * 100)
+    preview = content.strip()
+    if len(preview) > 8000:
+        preview = preview[:8000]
 
-    return success({"category": best_cat, "confidence": confidence})
+    return success({
+        "category": best_cat,
+        "confidence": confidence,
+        "content_text": preview,
+        "suggested_title": (file.filename or "").rsplit(".", 1)[0] if file.filename else "",
+    })
 
 
 @router.get("/{doc_id}")
@@ -309,6 +325,10 @@ def update_document(doc_id: int, title: Optional[str] = Form(None), category: Op
     db.add(new_version_record)
     db.commit()
     db.refresh(doc)
+
+    if doc.status == "published":
+        _index_document_to_vector(db, doc_id)
+
     return success(DocumentOut.model_validate(doc).model_dump())
 
 
@@ -328,21 +348,48 @@ def delete_document_endpoint(doc_id: int, current_user: User = Depends(require_r
     return success(None, "删除成功")
 
 
+def _sync_document_chunks(db: Session, doc: Document) -> list:
+    """确保文档正文已切分为 chunk"""
+    if not doc.content_text or not doc.content_text.strip():
+        return []
+    existing = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc.id).all()
+    if existing:
+        return existing
+    chunks = split_text_to_chunks(doc.content_text)
+    for i, chunk in enumerate(chunks):
+        keywords = extract_keywords(chunk)
+        db.add(DocumentChunk(document_id=doc.id, chunk_index=i, content=chunk, keywords=keywords))
+    db.commit()
+    return db.query(DocumentChunk).filter(DocumentChunk.document_id == doc.id).all()
+
+
+def _index_document_to_vector(db: Session, doc_id: int) -> int:
+    """将已发布文档写入向量库（先删后建）"""
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc or doc.status != "published":
+        delete_document(doc_id)
+        return 0
+    chunks = _sync_document_chunks(db, doc)
+    delete_document(doc_id)
+    if not chunks:
+        return 0
+    chunk_dicts = [{"content": c.content, "keywords": c.keywords or ""} for c in chunks]
+    add_documents(doc_id, chunk_dicts)
+    return len(chunks)
+
+
 @router.post("/{doc_id}/publish")
 def publish_document(doc_id: int, current_user: User = Depends(require_roles("hr", "admin")), db: Session = Depends(get_db)):
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         return error("文档不存在")
+    if not doc.content_text or not doc.content_text.strip():
+        return error("文档正文为空，无法发布")
     doc.status = "published"
     db.commit()
 
-    # 发布时自动向量化到Chroma
-    chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc_id).all()
-    if chunks:
-        chunk_dicts = [{"content": c.content, "keywords": c.keywords or ""} for c in chunks]
-        add_documents(doc_id, chunk_dicts)
-
-    return success(None, "发布成功")
+    chunk_count = _index_document_to_vector(db, doc_id)
+    return success({"chunk_count": chunk_count}, "发布成功")
 
 
 @router.post("/{doc_id}/archive")
@@ -352,6 +399,7 @@ def archive_document(doc_id: int, current_user: User = Depends(require_roles("hr
         return error("文档不存在")
     doc.status = "archived"
     db.commit()
+    delete_document(doc_id)
     return success(None, "归档成功")
 
 
@@ -362,6 +410,7 @@ def unarchive_document(doc_id: int, current_user: User = Depends(require_roles("
         return error("文档不存在")
     doc.status = "draft"
     db.commit()
+    delete_document(doc_id)
     return success(None, "下架成功")
 
 
@@ -411,10 +460,8 @@ def reindex_all_documents(current_user: User = Depends(require_roles("hr", "admi
     indexed_count = 0
 
     for doc in documents:
-        chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == doc.id).all()
-        if chunks:
-            chunk_dicts = [{"content": c.content, "keywords": c.keywords or ""} for c in chunks]
-            add_documents(doc.id, chunk_dicts)
+        if doc.status == "published":
+            _index_document_to_vector(db, doc.id)
             indexed_count += 1
 
     stats = get_collection_stats()

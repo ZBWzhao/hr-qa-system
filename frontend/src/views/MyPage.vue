@@ -19,6 +19,29 @@
     <!-- 功能标签页 -->
     <el-card>
       <el-tabs v-model="activeTab">
+        <!-- 问答历史 -->
+        <el-tab-pane label="问答历史" name="history">
+          <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap">
+            <el-input v-model="historyKeyword" placeholder="搜索问题或回答..." clearable style="flex: 1; min-width: 160px" @keyup.enter="fetchHistory" />
+            <el-button type="primary" @click="fetchHistory">搜索</el-button>
+          </div>
+          <el-table :data="historyRecords" v-loading="historyLoading" stripe>
+            <el-table-column prop="question" label="问题" min-width="240" show-overflow-tooltip />
+            <el-table-column prop="answer_type" label="类型" width="90">
+              <template #default="{ row }"><el-tag size="small">{{ answerTypeLabel(row.answer_type) }}</el-tag></template>
+            </el-table-column>
+            <el-table-column prop="created_at" label="时间" width="110">
+              <template #default="{ row }">{{ row.created_at?.substring(0, 10) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="100">
+              <template #default="{ row }">
+                <el-button size="small" type="primary" plain @click="viewDetail(row)">详情</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-pagination style="margin-top: 16px; justify-content: center" :current-page="historyPage" :page-size="20" :total="historyTotal" layout="prev, pager, next" @current-change="p => { historyPage = p; fetchHistory() }" />
+        </el-tab-pane>
+
         <!-- 我的收藏 -->
         <el-tab-pane label="我的收藏" name="favorites">
           <el-table :data="favRecords" v-loading="favLoading" stripe>
@@ -181,6 +204,25 @@ async function handleFav(row) {
   } catch (e) {}
 }
 
+// ===== 问答历史 =====
+const historyLoading = ref(false)
+const historyRecords = ref([])
+const historyPage = ref(1)
+const historyTotal = ref(0)
+const historyKeyword = ref('')
+
+async function fetchHistory() {
+  historyLoading.value = true
+  try {
+    const params = { page: historyPage.value }
+    const kw = historyKeyword.value?.trim()
+    if (kw) params.keyword = kw
+    const res = await getChatHistory(params)
+    historyRecords.value = res.data?.items || []
+    historyTotal.value = res.data?.total || 0
+  } catch (e) {} finally { historyLoading.value = false }
+}
+
 // ===== 我的收藏 =====
 const favLoading = ref(false)
 const favRecords = ref([])
@@ -250,7 +292,8 @@ async function submitCreateTicket() {
 
 // ===== 标签切换时加载数据 =====
 watch(activeTab, (tab) => {
-  if (tab === 'favorites') fetchFavorites()
+  if (tab === 'history') fetchHistory()
+  else if (tab === 'favorites') fetchFavorites()
   else if (tab === 'feedback') fetchFeedbacks()
   else if (tab === 'tickets') fetchTickets()
 })

@@ -5,6 +5,95 @@ import subprocess
 import tempfile
 from app.core.config import settings
 
+_REASONING_MARKERS = (
+    "首先，", "首先,", "我需要", "我需要基于", "用户的问题是", "用户提到",
+    "从知识内容中", "根据指令", "指令要求", "让我", "我来", "知识来源有",
+    "用户想了解", "检查这些信息", "从知识内容", "不得编造",
+)
+
+_FINAL_ANSWER_PATTERNS = (
+    r"(?:因此|所以|综上所述|总结来说|直接回答)[：:，,\s]*(.+)",
+    r"(?:核心信息[是为]|最终答案[是为])[：:，,\s]*(.+)",
+)
+
+
+def looks_like_internal_reasoning(text: str) -> bool:
+    if not text or not str(text).strip():
+        return True
+    t = str(text).strip()
+    head = t[:280]
+    marker_hits = sum(1 for m in _REASONING_MARKERS if m in head)
+    if marker_hits >= 2:
+        return True
+    if t.startswith("首先") and len(t) > 120:
+        return True
+    if "用户的问题" in head and "知识内容" in t[:500]:
+        return True
+    return False
+
+
+def looks_truncated(text: str) -> bool:
+    if not text or not str(text).strip():
+        return True
+    t = str(text).strip()
+    if len(t) < 12:
+        return True
+    if t[-1] in "。！？.!?」》\"'":
+        return False
+    bad_endings = ("，", "、", "月", "日", "的", "是", "在", "为", "和", "与", "及", "到", "请")
+    if any(t.endswith(x) for x in bad_endings):
+        return True
+    if re.search(r"根据.{0,20}(知识|文档|内容|信息)[，,]?$", t):
+        return True
+    return False
+
+
+def extract_final_answer(text: str) -> str:
+    if not text:
+        return ""
+    t = str(text).strip()
+    for pattern in _FINAL_ANSWER_PATTERNS:
+        m = re.search(pattern, t, re.DOTALL)
+        if m:
+            candidate = m.group(1).strip()
+            if len(candidate) >= 20 and not looks_like_internal_reasoning(candidate):
+                return candidate
+
+    lines = [ln.strip() for ln in t.split("\n") if ln.strip()]
+    for i, line in enumerate(lines):
+        if any(line.startswith(m.rstrip("，,")) for m in _REASONING_MARKERS):
+            continue
+        if line.startswith("用户") and "问题" in line:
+            continue
+        candidate = "\n".join(lines[i:]).strip()
+        if len(candidate) >= 20:
+            return candidate
+    return t
+
+
+def sanitize_user_facing_text(text: str, fallback: str = "") -> str:
+    if is_ai_service_error(text):
+        return fallback
+    if not text or not str(text).strip():
+        return fallback
+
+    cleaned = str(text).strip()
+    if looks_like_internal_reasoning(cleaned):
+        extracted = extract_final_answer(cleaned)
+        if extracted and not looks_like_internal_reasoning(extracted):
+            cleaned = extracted
+        else:
+            return fallback
+
+    if looks_truncated(cleaned):
+        extracted = extract_final_answer(cleaned)
+        if extracted and not looks_truncated(extracted) and not looks_like_internal_reasoning(extracted):
+            cleaned = extracted
+        else:
+            return fallback
+
+    return cleaned
+
 
 def call_mimo_api(messages: list, max_tokens: int = 500, temperature: float = 0.3) -> str:
     """调用小米MiMo API"""
@@ -42,11 +131,6 @@ def call_mimo_api(messages: list, max_tokens: int = 500, temperature: float = 0.
             return f"AI服务错误: {resp['error'].get('message', '未知错误')}"
 
         content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-        # 如果content为空，可能是reasoning模型，尝试提取reasoning_content
-        if not content:
-            content = resp.get("choices", [{}])[0].get("message", {}).get("reasoning_content", "")
-
         return content.strip() if content else ""
     except subprocess.TimeoutExpired:
         return "AI服务响应超时，请稍后重试"
@@ -80,7 +164,8 @@ def generate_knowledge_answer(
 2. 直接回答用户问题，不要使用「我理解您的问题是」「根据标准答案库查询」等套话
 3. 语言简洁友好，优先给出用户最需要的核心信息（如电话、天数、金额、流程步骤等）
 4. 若知识内容与用户具体问题高度相关，可结合对话上下文做简短个性化说明
-5. 控制在300字以内，可适度使用 Markdown 突出重点"""
+5. 控制在300字以内，可适度使用 Markdown 突出重点
+6. 严禁输出思考过程、分析步骤或内心独白（如「首先」「我需要」「用户的问题是」），只输出给用户看的最终答案"""
 
     parts = [f"【知识来源：{source_label}】\n{knowledge}"]
     if context_hint:
@@ -95,7 +180,8 @@ def generate_knowledge_answer(
         {"role": "user", "content": "\n\n".join(parts)},
     ]
 
-    return call_mimo_api(messages, max_tokens=600, temperature=0.3)
+    raw = call_mimo_api(messages, max_tokens=900, temperature=0.3)
+    return sanitize_user_facing_text(raw, fallback="")
 
 
 def generate_answer(question: str, context: str, history: str = "") -> str:
@@ -111,7 +197,8 @@ def generate_answer(question: str, context: str, history: str = "") -> str:
 1. 基于提供的文档内容回答，不要编造信息
 2. 如果文档中没有相关内容，明确告知"根据现有知识库，未找到相关信息，无法回答"
 3. 回答要简洁，控制在200字以内
-4. 使用简洁的格式，不要过度使用Markdown"""
+4. 使用简洁的格式，不要过度使用Markdown
+5. 严禁输出思考过程或分析步骤，只输出最终答案"""
 
     user_content = f"""【制度文档内容】
 {context}
@@ -128,7 +215,8 @@ def generate_answer(question: str, context: str, history: str = "") -> str:
         {"role": "user", "content": user_content}
     ]
 
-    return call_mimo_api(messages, max_tokens=500, temperature=0.3)
+    raw = call_mimo_api(messages, max_tokens=800, temperature=0.3)
+    return sanitize_user_facing_text(raw, fallback="")
 
 
 def generate_clarification(question: str, possible_intents: list) -> str:
@@ -406,3 +494,126 @@ def _analyze_intent_with_llm(question: str, context_hint: str = "") -> dict | No
         "clarification_reason": parsed.get("clarification_reason", ""),
         "clarification_hint": parsed.get("clarification_hint", ""),
     }
+
+
+def generate_feedback_handling_suggestion(
+    question: str,
+    answer: str,
+    correction_text: str = "",
+) -> str:
+    """为 HR 生成反馈/纠错处理建议"""
+    prompt = f"""你是 HR 知识库管理员助手。员工对以下问答给出了「无用」反馈或纠错，请给出简洁的处理建议（3-5条要点）。
+
+原问题：{question}
+系统回答：{answer[:800]}
+员工纠错/说明：{correction_text or '（未填写，仅标记无用）'}
+
+请输出：
+1. 问题根因（答非所问/信息过时/知识库缺失等）
+2. 建议动作（更新制度文档/补充公告/修订标准答案/忽略等）
+3. 如需补充知识，给出建议录入的要点（1-2句）
+
+控制在150字以内，使用条目列表。"""
+
+    messages = [
+        {"role": "system", "content": "你是 HR Copilot 知识运营助手，输出简洁可执行的处理建议。"},
+        {"role": "user", "content": prompt},
+    ]
+    result = call_mimo_api(messages, max_tokens=300, temperature=0.2)
+    if is_ai_service_error(result):
+        if correction_text:
+            return f"建议：根据员工纠错「{correction_text[:100]}」核对制度文档或发布公告更新；确认后可标记已处理。"
+        return "建议：核对问答是否答非所问或信息过时，必要时更新制度文档或发布通知公告。"
+    return sanitize_user_facing_text(result.strip(), fallback=result.strip())
+
+
+def generate_interpretation_answer(
+    question: str,
+    knowledge: str,
+    user_profile: str = "",
+    history: str = "",
+) -> str:
+    """制度条文通俗解读，可选结合员工个人信息说明权益"""
+    if len(knowledge) > 2500:
+        knowledge = knowledge[:2500] + "..."
+
+    system_prompt = """你是公司HR助手。请用通俗易懂的大白话解读制度条文，帮助员工理解。
+
+要求：
+1. 严格基于提供的制度内容，不编造
+2. 避免官话套话，用「也就是说」「简单来说」等口语化表达
+3. 若提供了员工个人信息，结合其入职日期、试用期等说明「对您意味着什么」
+4. 控制在350字以内
+5. 只输出最终解读，禁止思考过程"""
+
+    parts = [f"【制度内容】\n{knowledge}"]
+    if user_profile:
+        parts.append(f"【员工信息】\n{user_profile}")
+    if history:
+        parts.append(history.strip())
+    parts.append(f"【用户问题】\n{question.strip()}")
+    parts.append("请用通俗语言解读并回答。")
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": "\n\n".join(parts)},
+    ]
+    raw = call_mimo_api(messages, max_tokens=900, temperature=0.35)
+    return sanitize_user_facing_text(raw, fallback="")
+
+
+def generate_gap_analysis_summary(questions: list[str]) -> str:
+    """对全部未解决知识缺口生成汇总分析与分类建议"""
+    if not questions:
+        return "当前没有未解决的知识缺口。"
+
+    q_text = "\n".join(f"- {q}" for q in questions[:40])
+    if len(questions) > 40:
+        q_text += f"\n… 共 {len(questions)} 条"
+
+    prompt = f"""你是 HR 知识库运营助手。以下是员工提问但未命中知识库的问题列表：
+
+{q_text}
+
+请输出：
+1. **总体概况**（2-3句）：这些问题反映了哪些知识盲区
+2. **分类建议**（按主题分类，如考勤/休假/薪酬/福利/其他）：每类给出 1-2 条可执行的补充建议（如发布哪类公告、补充哪类制度文档）
+
+控制在400字以内，使用 Markdown 标题与列表。只输出最终分析，禁止思考过程。"""
+
+    messages = [
+        {"role": "system", "content": "你是 HR Copilot 知识运营助手。"},
+        {"role": "user", "content": prompt},
+    ]
+    raw = call_mimo_api(messages, max_tokens=700, temperature=0.25)
+    cleaned = sanitize_user_facing_text(raw, fallback="")
+    if cleaned:
+        return cleaned
+    return "建议：针对高频未命中问题，补充相应的制度文档或发布通知公告。"
+
+
+def correct_user_question_typos(text: str) -> str:
+    """根据 HR 场景意图静默修正错别字/同音字/拼音混输，仅返回修正后的原句"""
+    if not text or not str(text).strip():
+        return text
+
+    system_prompt = """你是 HR 智能助手输入理解模块。根据用户想表达的 HR/考勤/公告/制度/工单/福利咨询意图，静默修正输入中的错别字、同音字、拼音或英文混输。
+
+规则：
+1. 只输出修正后的完整用户原句，不要解释、不要前缀、不要 markdown
+2. 若输入已清晰无误，原样输出
+3. 不要回答问题，不要扩写，不要改变用户意图
+4. 常见场景示例：
+   - 「发布一折公告」→「发布一条公告」
+   - 「公告表体」→「公告标题」
+   - 「7yue15日呢」→「7月15日呢」"""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"用户输入：{str(text).strip()}\n\n请输出修正后的句子："},
+    ]
+    raw = call_mimo_api(messages, max_tokens=150, temperature=0.05)
+    if is_ai_service_error(raw):
+        return text
+    cleaned = sanitize_user_facing_text(raw, fallback=text)
+    return cleaned or text

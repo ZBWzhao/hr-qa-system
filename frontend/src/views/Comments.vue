@@ -3,12 +3,8 @@
     <template #header><span style="font-weight: 600; color: #111827">评论讨论</span></template>
 
     <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap">
-      <el-select v-model="targetType" placeholder="选择类型" style="width: 120px" @change="fetchComments">
-        <el-option label="FAQ" value="faq" />
-        <el-option label="文档" value="document" />
-      </el-select>
-      <el-select v-model="targetId" :placeholder="targetType === 'faq' ? '选择FAQ' : '选择文档'" style="flex: 1; min-width: 160px" @change="fetchComments" filterable>
-        <el-option v-for="item in targetOptions" :key="item.id" :label="item.title || item.question" :value="item.id" />
+      <el-select v-model="targetId" placeholder="选择文档" style="flex: 1; min-width: 160px" @change="fetchComments" filterable>
+        <el-option v-for="item in targetOptions" :key="item.id" :label="item.title" :value="item.id" />
       </el-select>
     </div>
 
@@ -18,7 +14,7 @@
     </div>
 
     <div v-if="!targetId" style="text-align: center; padding: 40px; color: #9CA3AF">
-      请选择FAQ或文档后查看评论
+      请选择文档后查看评论
     </div>
 
     <div v-for="comment in comments" :key="comment.id" class="comment-item">
@@ -80,12 +76,11 @@ import { ref, onMounted, watch } from 'vue'
 import { Star } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getComments, createComment, likeComment, adoptComment, deleteComment } from '../api/comments'
-import { getFaqs } from '../api/faqs'
 import { getDocuments } from '../api/documents'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
-const targetType = ref('faq')
+const targetType = ref('document')
 const targetId = ref(null)
 const targetOptions = ref([])
 const comments = ref([])
@@ -95,13 +90,8 @@ const replyContent = ref('')
 
 async function fetchOptions() {
   try {
-    if (targetType.value === 'faq') {
-      const res = await getFaqs({ page_size: 100 })
-      targetOptions.value = res.data?.items || []
-    } else {
-      const res = await getDocuments({ page_size: 100 })
-      targetOptions.value = res.data?.items || []
-    }
+    const res = await getDocuments({ page_size: 100 })
+    targetOptions.value = res.data?.items || []
   } catch (e) {
     targetOptions.value = []
   }

@@ -8,6 +8,7 @@ from app.core.response import success, error, paginated
 from app.schemas.qa import FeedbackCreate, FeedbackOut, FeedbackHandle
 from app.models.qa import QAFeedback, QARecord
 from app.models.user import User
+from app.services.llm import generate_feedback_handling_suggestion, sanitize_user_facing_text
 
 router = APIRouter()
 
@@ -44,7 +45,6 @@ def list_feedback(status: Optional[str] = None, page: int = 1, page_size: int = 
     result = []
     for f in items:
         fb = FeedbackOut.model_validate(f).model_dump()
-        # 关联问答记录
         record = db.query(QARecord).filter(QARecord.id == f.record_id).first()
         if record:
             fb["question"] = record.question
@@ -54,11 +54,65 @@ def list_feedback(status: Optional[str] = None, page: int = 1, page_size: int = 
             fb["question"] = ""
             fb["answer"] = ""
             fb["answer_type"] = ""
-        # 反馈人
         fb_user = db.query(User).filter(User.id == f.user_id).first()
         fb["user_name"] = fb_user.real_name if fb_user else "未知"
         result.append(fb)
     return paginated(result, total, page, page_size)
+
+
+@router.get("/{feedback_id}/suggestion")
+def get_feedback_suggestion(feedback_id: int, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
+    """仅返回已缓存的 AI 建议，不自动调用 LLM"""
+    feedback = db.query(QAFeedback).filter(QAFeedback.id == feedback_id).first()
+    if not feedback:
+        return error("反馈不存在")
+    if feedback.ai_suggestion:
+        return success({
+            "suggestion": feedback.ai_suggestion,
+            "cached": True,
+            "generated_at": feedback.ai_suggestion_at.isoformat() if feedback.ai_suggestion_at else None,
+        })
+    return success({"suggestion": "", "cached": False})
+
+
+@router.post("/{feedback_id}/suggestion")
+def generate_feedback_suggestion(
+    feedback_id: int,
+    force: int = 0,
+    current_user: User = Depends(require_roles("hr")),
+    db: Session = Depends(get_db),
+):
+    """点击按钮后生成 AI 建议；force=1 时忽略缓存重新生成"""
+    feedback = db.query(QAFeedback).filter(QAFeedback.id == feedback_id).first()
+    if not feedback:
+        return error("反馈不存在")
+
+    if feedback.status != "pending" and not feedback.ai_suggestion:
+        return error("已处理的反馈无需生成 AI 建议")
+
+    if feedback.ai_suggestion and not force:
+        return success({
+            "suggestion": feedback.ai_suggestion,
+            "cached": True,
+            "generated_at": feedback.ai_suggestion_at.isoformat() if feedback.ai_suggestion_at else None,
+        })
+
+    record = db.query(QARecord).filter(QARecord.id == feedback.record_id).first()
+    question = record.question if record else ""
+    answer = record.answer if record else ""
+    suggestion = sanitize_user_facing_text(
+        generate_feedback_handling_suggestion(question, answer, feedback.correction_text or ""),
+        fallback="建议：核对问答是否答非所问或信息过时，必要时更新制度文档或发布通知公告。",
+    )
+    feedback.ai_suggestion = suggestion
+    feedback.ai_suggestion_at = datetime.now()
+    db.commit()
+    return success({
+        "suggestion": suggestion,
+        "cached": False,
+        "regenerated": bool(force),
+        "generated_at": feedback.ai_suggestion_at.isoformat(),
+    })
 
 
 @router.put("/{feedback_id}/handle")

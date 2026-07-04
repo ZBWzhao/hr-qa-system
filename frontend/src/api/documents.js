@@ -36,6 +36,10 @@ export function classifyDocument(formData) {
   return request.post('/documents/classify', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
+export function downloadDocument(docId) {
+  return request.get(`/documents/${docId}/download`, { responseType: 'blob' })
+}
+
 export function getDocumentChunks(docId) {
   return request.get(`/documents/${docId}/chunks`)
 }

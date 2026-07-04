@@ -8,7 +8,7 @@ from app.core.security import get_password_hash
 from app.models.user import User
 from app.models.department import Department
 from app.models.document import Document, DocumentChunk, DocumentVersion
-from app.models.qa import QARecord, FAQ, Rule, QAFeedback, QAMiss
+from app.models.qa import QARecord, Rule, QAFeedback, QAMiss
 from app.models.notice import Notice, NoticeRead
 from app.models.ticket import Ticket
 from app.models.comment import Comment
@@ -324,19 +324,6 @@ def init_db():
 
             version_record = DocumentVersion(document_id=doc.id, version="1.0", content_text=content, created_by=users[0].id)
             db.add(version_record)
-
-        faqs = [
-            ("年假怎么计算？", "根据公司规定，年假按工龄计算：\n- 工龄1年以上不满10年：5天\n- 工龄10年以上不满20年：10天\n- 工龄20年以上：15天\n\n年假需提前3个工作日申请，当年未休完的年假次年3月31日前可补休，逾期自动清零。", "leave", "年假,休假,工龄"),
-            ("请假需要提前多久申请？", "请假需提前通过OA系统提交申请：\n- 1天以内：直属上级审批\n- 1-3天：部门负责人审批\n- 3天以上：HR审批\n\n年假需提前3个工作日，其他假期需提前1个工作日。紧急情况可先电话请假，事后补办手续。", "leave", "请假,审批,流程"),
-            ("加班可以调休吗？", "可以。加班可选择调休或加班费：\n- 工作日加班：调休或1.5倍加班费\n- 周末加班：调休或2倍加班费\n- 法定节假日：3倍加班费\n\n调休须在加班后3个月内使用完毕，逾期自动作废。", "attendance", "加班,调休,加班费"),
-            ("试用期多久？", "公司试用期为3个月，自入职之日起计算。\n\n试用期工资为转正工资的80%。试用期满前15天会启动转正评估，需完成转正申请和工作总结。考核不合格可延长试用期1个月。", "other", "试用期,转正,入职"),
-            ("报销流程是什么？", "报销流程如下：\n1. 填写报销申请单，附上原始发票\n2. 部门负责人审批（1000元以内）\n3. 财务部审核\n4. 总经理审批（5000元以上）\n5. 财务部付款\n\n报销须在费用发生后30天内提交，逾期不予报销。", "salary", "报销,发票,财务"),
-            ("绩效申诉怎么提交？", "绩效申诉流程：\n1. 在考核结果公布后5个工作日内提出\n2. 首先向直属上级提出申诉\n3. 如对处理结果不满，可向HR部门提出书面申诉\n4. HR部门在10个工作日内完成调查并反馈\n5. 申诉结果为最终决定\n\n申诉时请准备充分的证据材料。", "performance", "绩效,申诉,考核"),
-        ]
-
-        for q, a, cat, kw in faqs:
-            faq = FAQ(question=q, answer=a, category=cat, keywords=kw, view_count=0, sort_order=0, created_by=users[1].id)
-            db.add(faq)
 
         rules = [
             ("HR联系方式查询", "客服电话,HR电话,联系HR,HR联系方式", "HR部门联系方式：\n- 电话：010-88888888\n- 邮箱：hr@company.com\n- 办公地点：总部大楼3层人力资源部\n- 工作时间：周一至周五 9:00-18:00\n\n如有紧急事务，可拨打HR直线：13800138000", "contact", 10),

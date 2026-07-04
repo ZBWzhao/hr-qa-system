@@ -24,6 +24,10 @@ export function getCategoryStats() {
   return request.get('/chat/category-stats')
 }
 
+export function getTopQuestions(params) {
+  return request.get('/chat/top-questions', { params })
+}
+
 export function reindexDocuments() {
   return request.post('/documents/reindex')
 }

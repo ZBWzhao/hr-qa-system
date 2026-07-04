@@ -67,6 +67,10 @@
             <el-icon><DataAnalysis /></el-icon>
             <template #title>数据看板</template>
           </el-menu-item>
+          <el-menu-item index="/roi">
+            <el-icon><TrendCharts /></el-icon>
+            <template #title>ROI 分析</template>
+          </el-menu-item>
         </template>
 
         <template v-if="userStore.isAdmin">
@@ -152,6 +156,10 @@
           <el-menu-item index="/statistics">
             <el-icon><DataAnalysis /></el-icon>
             <template #title>数据看板</template>
+          </el-menu-item>
+          <el-menu-item index="/roi">
+            <el-icon><TrendCharts /></el-icon>
+            <template #title>ROI 分析</template>
           </el-menu-item>
         </template>
 

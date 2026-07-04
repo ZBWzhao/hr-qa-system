@@ -3,8 +3,8 @@
     <template #header>
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
         <span style="font-weight: 600; color: #111827">知识管理</span>
-        <el-button v-if="userStore.isHR || userStore.isAdmin" type="primary" @click="activeTab === 'documents' ? showAddDocument() : showAddFaq()">
-          {{ activeTab === 'documents' ? '上传文档' : '新增标准答案' }}
+        <el-button v-if="userStore.isHR || userStore.isAdmin" type="primary" @click="showAddDocument()">
+          上传文档
         </el-button>
       </div>
     </template>
@@ -68,47 +68,6 @@
           </el-table-column>
         </el-table>
         <el-pagination style="margin-top: 16px; justify-content: center" :current-page="docPage" :page-size="20" :total="docTotal" layout="prev, pager, next" @current-change="p => { docPage = p; fetchDocuments() }" />
-      </el-tab-pane>
-
-      <!-- 标准答案库 -->
-      <el-tab-pane label="标准答案库" name="faqs">
-        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap">
-          <el-input v-model="faqKeyword" placeholder="搜索问题..." clearable style="flex: 1; min-width: 160px" @keyup.enter="fetchFaqs">
-            <template #append>
-              <el-button :icon="Search" @click="fetchFaqs" />
-            </template>
-          </el-input>
-          <el-select v-model="faqCategory" placeholder="全部分类" clearable @change="fetchFaqs" style="min-width: 120px">
-            <el-option label="考勤" value="attendance" />
-            <el-option label="薪酬" value="salary" />
-            <el-option label="福利" value="benefit" />
-            <el-option label="休假" value="leave" />
-            <el-option label="绩效" value="performance" />
-            <el-option label="入职/其他" value="other" />
-          </el-select>
-        </div>
-        <el-table :data="faqs" v-loading="faqLoading" stripe>
-          <el-table-column prop="question" label="问题" min-width="200" show-overflow-tooltip />
-          <el-table-column prop="category" label="分类" width="100">
-            <template #default="{ row }"><el-tag size="small">{{ faqCategoryLabel(row.category) }}</el-tag></template>
-          </el-table-column>
-          <el-table-column prop="keywords" label="关键词" min-width="150" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.keywords || '—' }}</template>
-          </el-table-column>
-          <el-table-column prop="view_count" label="浏览次数" width="100" sortable />
-          <el-table-column label="操作" :width="(userStore.isHR || userStore.isAdmin) ? 220 : 80" fixed="right">
-            <template #default="{ row }">
-              <div style="display: flex; flex-wrap: nowrap; gap: 4px">
-                <el-button size="small" @click="viewFaq(row)">查看</el-button>
-                <template v-if="userStore.isHR || userStore.isAdmin">
-                  <el-button size="small" type="primary" @click="showEditFaq(row)">编辑</el-button>
-                  <el-button size="small" type="danger" @click="handleDeleteFaq(row)">删除</el-button>
-                </template>
-              </div>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-pagination style="margin-top: 16px; justify-content: center" :current-page="faqPage" :page-size="20" :total="faqTotal" layout="prev, pager, next" @current-change="p => { faqPage = p; fetchFaqs() }" />
       </el-tab-pane>
     </el-tabs>
 
@@ -185,59 +144,14 @@
         <el-button type="primary" @click="submitDoc">确定</el-button>
       </template>
     </el-dialog>
-
-    <!-- FAQ 编辑对话框 -->
-    <el-dialog v-model="faqDialogVisible" :title="faqEditId ? '编辑标准答案' : '新增标准答案'" width="min(92vw, 600px)">
-      <el-form :model="faqForm" label-width="80px">
-        <el-form-item label="问题"><el-input v-model="faqForm.question" /></el-form-item>
-        <el-form-item label="回答"><el-input v-model="faqForm.answer" type="textarea" :rows="6" /></el-form-item>
-        <el-form-item label="分类">
-          <el-select v-model="faqForm.category">
-            <el-option label="考勤" value="attendance" />
-            <el-option label="薪酬" value="salary" />
-            <el-option label="福利" value="benefit" />
-            <el-option label="休假" value="leave" />
-            <el-option label="绩效" value="performance" />
-            <el-option label="入职/其他" value="other" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="关键词">
-          <div style="display: flex; gap: 8px; width: 100%">
-            <el-input v-model="faqForm.keywords" placeholder="用逗号分隔" style="flex: 1" />
-            <el-button type="primary" :loading="generating" @click="handleGenerateKeywords">
-              <el-icon style="margin-right: 4px"><MagicStick /></el-icon>
-              AI识别
-            </el-button>
-          </div>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="faqDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitFaq">确定</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- FAQ 详情抽屉 -->
-    <el-drawer v-model="faqDetailVisible" title="标准答案详情" size="50%">
-      <h3>{{ faqDetail.question }}</h3>
-      <el-divider />
-      <div style="white-space: pre-wrap; line-height: 1.8">{{ faqDetail.answer }}</div>
-      <el-divider />
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="分类">{{ faqCategoryLabel(faqDetail.category) }}</el-descriptions-item>
-        <el-descriptions-item label="浏览次数">{{ faqDetail.view_count }}</el-descriptions-item>
-        <el-descriptions-item label="关键词">{{ faqDetail.keywords || '—' }}</el-descriptions-item>
-      </el-descriptions>
-    </el-drawer>
   </el-card>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Document, Download, Loading, MagicStick } from '@element-plus/icons-vue'
-import { getDocuments, createDocument, updateDocument, deleteDocument, publishDocument, archiveDocument, unarchiveDocument, getDocument, classifyDocument } from '../api/documents'
-import { getFaqs, getAllFaqs, getFaq, createFaq, updateFaq, deleteFaq, generateKeywords } from '../api/faqs'
+import { Search, Document, Download, Loading } from '@element-plus/icons-vue'
+import { getDocuments, createDocument, updateDocument, deleteDocument, publishDocument, archiveDocument, unarchiveDocument, getDocument, classifyDocument, downloadDocument } from '../api/documents'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
@@ -260,20 +174,6 @@ const docDetail = ref({})
 const classifying = ref(false)
 const categoryConfidence = ref(null)
 
-// FAQ 相关
-const faqLoading = ref(false)
-const faqs = ref([])
-const faqPage = ref(1)
-const faqTotal = ref(0)
-const faqKeyword = ref('')
-const faqCategory = ref('')
-const faqDialogVisible = ref(false)
-const faqEditId = ref(null)
-const faqForm = reactive({ question: '', answer: '', category: 'other', keywords: '' })
-const faqDetailVisible = ref(false)
-const faqDetail = ref({})
-const generating = ref(false)
-
 // 文档相关函数
 function categoryLabel(c) { return { attendance: '考勤', salary: '薪酬', benefit: '福利', leave: '休假', performance: '绩效', other: '其他' }[c] || c }
 function statusType(s) { return { draft: 'info', published: 'success', archived: 'warning' }[s] || '' }
@@ -285,14 +185,22 @@ function highlightTitle(title, keyword) {
   return title.replace(regex, '<em style="color: #f5222d; font-style: normal; font-weight: 600">$1</em>')
 }
 
-function downloadFile(doc) {
+async function downloadFile(doc) {
   if (!doc.file_path) { ElMessage.warning('该文档没有附件'); return }
-  const link = document.createElement('a')
-  link.href = `/api/v1/documents/${doc.id}/download`
-  link.download = doc.file_path.split('/').pop()?.split('\\').pop() || '附件'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
+  const fileName = doc.file_path.split('/').pop()?.split('\\').pop() || '附件'
+  try {
+    const blob = await downloadDocument(doc.id)
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (e) {
+    ElMessage.error('下载失败，请稍后重试')
+  }
 }
 
 async function fetchDocuments() {
@@ -342,6 +250,12 @@ async function autoClassify(file) {
       docForm.category = res.data.category
       categoryConfidence.value = res.data.confidence || 0
     }
+    if (res.data?.content_text && !docForm.content_text) {
+      docForm.content_text = res.data.content_text
+    }
+    if (res.data?.suggested_title && !docForm.title) {
+      docForm.title = res.data.suggested_title
+    }
   } catch (e) {} finally { classifying.value = false }
 }
 
@@ -369,60 +283,8 @@ async function handleArchive(row) { await ElMessageBox.confirm('确认归档？'
 async function handleUnarchive(row) { await ElMessageBox.confirm('确认下架？', '提示'); await unarchiveDocument(row.id); ElMessage.success('下架成功'); fetchDocuments() }
 async function handleDeleteDoc(row) { await ElMessageBox.confirm('确认删除？', '提示', { type: 'warning' }); await deleteDocument(row.id); ElMessage.success('删除成功'); fetchDocuments() }
 
-// FAQ 相关函数
-function faqCategoryLabel(c) { return { attendance: '考勤', salary: '薪酬', benefit: '福利', leave: '休假', performance: '绩效', other: '入职/其他' }[c] || c || '—' }
-
-async function fetchFaqs() {
-  faqLoading.value = true
-  try {
-    const api = (userStore.isHR || userStore.isAdmin) ? getAllFaqs : getFaqs
-    const res = await api({ page: faqPage.value, keyword: faqKeyword.value, category: faqCategory.value })
-    faqs.value = res.data?.items || []
-    faqTotal.value = res.data?.total || 0
-  } catch (e) {} finally { faqLoading.value = false }
-}
-
-function showAddFaq() {
-  faqEditId.value = null
-  Object.assign(faqForm, { question: '', answer: '', category: 'other', keywords: '' })
-  faqDialogVisible.value = true
-}
-
-function showEditFaq(row) {
-  faqEditId.value = row.id
-  Object.assign(faqForm, { question: row.question, answer: row.answer, category: row.category || 'other', keywords: row.keywords || '' })
-  faqDialogVisible.value = true
-}
-
-async function viewFaq(row) {
-  const res = await getFaq(row.id)
-  faqDetail.value = res.data
-  faqDetailVisible.value = true
-  row.view_count = res.data.view_count
-}
-
-async function submitFaq() {
-  if (faqEditId.value) { await updateFaq(faqEditId.value, faqForm) }
-  else { await createFaq(faqForm) }
-  ElMessage.success('操作成功')
-  faqDialogVisible.value = false
-  fetchFaqs()
-}
-
-async function handleDeleteFaq(row) { await ElMessageBox.confirm('确认删除？', '提示', { type: 'warning' }); await deleteFaq(row.id); ElMessage.success('删除成功'); fetchFaqs() }
-
-async function handleGenerateKeywords() {
-  if (!faqForm.question && !faqForm.answer) { ElMessage.warning('请先输入问题或回答'); return }
-  generating.value = true
-  try {
-    const res = await generateKeywords({ question: faqForm.question, answer: faqForm.answer })
-    if (res.data?.keywords) { faqForm.keywords = res.data.keywords; ElMessage.success('关键词生成成功') }
-  } catch (e) { ElMessage.error('关键词生成失败') } finally { generating.value = false }
-}
-
 watch(activeTab, (tab) => {
   if (tab === 'documents') fetchDocuments()
-  else if (tab === 'faqs') fetchFaqs()
 })
 
 onMounted(() => {

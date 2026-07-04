@@ -25,7 +25,7 @@
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center">
               <span style="font-weight: 600; color: #111827">高频问题排行</span>
-              <el-button text type="primary" size="small" @click="$router.push('/knowledge')">查看详情</el-button>
+              <el-button text type="primary" size="small" @click="$router.push('/history')">查看详情</el-button>
             </div>
           </template>
           <div ref="faqChart" style="height: 350px"></div>
@@ -52,8 +52,7 @@ import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { getRoiReport } from '../api/roi'
 import { getTicketStats } from '../api/tickets'
-import { getFaqs } from '../api/faqs'
-import { getCategoryStats } from '../api/chat'
+import { getTopQuestions, getCategoryStats } from '../api/chat'
 
 const router = useRouter()
 
@@ -155,53 +154,58 @@ async function initCategoryChart() {
 async function initFaqChart() {
   const chart = echarts.init(faqChart.value)
   charts.push(chart)
+  const truncateText = (text, maxLen = 16) => {
+    if (!text) return ''
+    return text.length > maxLen ? text.substring(0, maxLen) + '…' : text
+  }
   try {
-    const res = await getFaqs({ page_size: 10 })
-    const faqs = res.data?.items || []
-    // 截断问题文本，保留合理长度
-    const truncateText = (text, maxLen = 20) => {
-      if (!text) return ''
-      return text.length > maxLen ? text.substring(0, maxLen) + '...' : text
+    const res = await getTopQuestions({ limit: 8 })
+    const items = (res.data || []).slice().sort((a, b) => a.count - b.count)
+    if (!items.length) {
+      chart.setOption({
+        title: { text: '暂无问答数据', left: 'center', top: 'middle', textStyle: { color: '#9CA3AF', fontSize: 14 } },
+        xAxis: { show: false },
+        yAxis: { show: false },
+        series: [],
+      })
+      return
     }
+    const chartHeight = Math.max(320, items.length * 38 + 40)
+    faqChart.value.style.height = `${chartHeight}px`
+    chart.resize()
     chart.setOption({
       tooltip: {
         trigger: 'axis',
         axisPointer: { type: 'shadow' },
-        formatter: function(params) {
-          const idx = params[0].dataIndex
-          const faq = faqs[faqs.length - 1 - idx]
-          return `${faq?.question || ''}<br/>浏览次数：${params[0].value}`
-        }
+        formatter(params) {
+          const p = params[0]
+          const item = items[p.dataIndex]
+          return `${item?.question || ''}<br/>提问次数：${p.value}`
+        },
       },
-      grid: { left: '30%', right: '10%' },
-      xAxis: { type: 'value' },
+      grid: { left: 8, right: 24, top: 8, bottom: 8, containLabel: true },
+      xAxis: {
+        type: 'value',
+        minInterval: 1,
+        splitLine: { lineStyle: { type: 'dashed', color: '#eee' } },
+      },
       yAxis: {
         type: 'category',
-        data: faqs.map(f => truncateText(f.question)).reverse(),
-        axisLabel: {
-          width: 150,
-          overflow: 'truncate',
-          ellipsis: '...'
-        }
+        data: items.map(i => truncateText(i.question)),
+        axisLabel: { fontSize: 11, width: 110, overflow: 'truncate' },
       },
       series: [{
         type: 'bar',
-        data: faqs.map(f => f.view_count).reverse(),
+        data: items.map(i => i.count),
         itemStyle: { color: '#059669' },
-        barWidth: '60%'
-      }]
+        barMaxWidth: 22,
+      }],
     })
-
-    // 添加点击事件
-    chart.on('click', function(params) {
-      router.push('/knowledge')
-    })
+    chart.on('click', () => router.push('/history'))
   } catch (e) {
     chart.setOption({
-      tooltip: {},
-      xAxis: { type: 'value' },
-      yAxis: { type: 'category', data: ['年假计算', '请假流程', '报销流程', '加班调休', '绩效申诉'] },
-      series: [{ type: 'bar', data: [150, 120, 100, 80, 60], itemStyle: { color: '#059669' } }]
+      title: { text: '加载失败', left: 'center', top: 'middle', textStyle: { color: '#9CA3AF', fontSize: 14 } },
+      series: [],
     })
   }
 }

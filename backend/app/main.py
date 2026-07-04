@@ -5,13 +5,35 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api import auth, users, departments, documents, faqs, rules, search, chat, chat_history, conversations, feedback, notices, tickets, comments, recommendations, onboarding, reminders, gaps, roi, approvals, bot
+from app.api import auth, users, departments, documents, rules, search, chat, chat_history, conversations, feedback, notices, tickets, comments, recommendations, onboarding, reminders, gaps, roi, approvals, bot
 
 # 导入所有模型，确保 Base.metadata.create_all() 能创建所有表
 from app.models import conversation_state  # noqa: F401
+from app.models import knowledge_cache  # noqa: F401
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def ensure_schema_updates():
+    """为已有数据库补充新增字段（幂等）"""
+    from sqlalchemy import inspect, text
+    from app.core.database import engine
+
+    try:
+        insp = inspect(engine)
+        if "qa_feedback" in insp.get_table_names():
+            cols = {c["name"] for c in insp.get_columns("qa_feedback")}
+            with engine.begin() as conn:
+                if "ai_suggestion" not in cols:
+                    conn.execute(text("ALTER TABLE qa_feedback ADD COLUMN ai_suggestion TEXT NULL"))
+                if "ai_suggestion_at" not in cols:
+                    conn.execute(text("ALTER TABLE qa_feedback ADD COLUMN ai_suggestion_at DATETIME NULL"))
+        if "qa_faq" in insp.get_table_names():
+            with engine.begin() as conn:
+                conn.execute(text("DROP TABLE IF EXISTS qa_faq"))
+    except Exception as e:
+        logger.warning("Schema update skipped: %s", e)
 
 
 def init_rag_system():
@@ -64,6 +86,7 @@ async def lifespan(app: FastAPI):
     # 启动时执行
     logger.info("HR Copilot 启动中...")
     Base.metadata.create_all(bind=engine)
+    ensure_schema_updates()
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)
     init_rag_system()
@@ -87,7 +110,6 @@ app.include_router(auth.router, prefix=f"{settings.API_V1_PREFIX}/auth", tags=["
 app.include_router(users.router, prefix=f"{settings.API_V1_PREFIX}/users", tags=["用户管理"])
 app.include_router(departments.router, prefix=f"{settings.API_V1_PREFIX}/departments", tags=["部门管理"])
 app.include_router(documents.router, prefix=f"{settings.API_V1_PREFIX}/documents", tags=["文档管理"])
-app.include_router(faqs.router, prefix=f"{settings.API_V1_PREFIX}/faqs", tags=["FAQ管理"])
 app.include_router(rules.router, prefix=f"{settings.API_V1_PREFIX}/rules", tags=["规则问答"])
 app.include_router(search.router, prefix=f"{settings.API_V1_PREFIX}/search", tags=["搜索"])
 app.include_router(chat.router, prefix=f"{settings.API_V1_PREFIX}/chat", tags=["智能问答"])

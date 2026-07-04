@@ -86,6 +86,21 @@
 
       <!-- 知识缺口 -->
       <el-tab-pane label="知识缺口" name="gaps">
+        <el-row :gutter="16" style="margin-bottom: 16px">
+          <el-col :span="8"><el-statistic title="未解决" :value="unresolvedGaps" /></el-col>
+        </el-row>
+        <el-card shadow="never" style="margin-bottom: 16px; background: #f8fafc">
+          <template #header>
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <span style="font-weight: 600">AI 知识缺口分析</span>
+              <el-button type="primary" size="small" :loading="gapAnalysisLoading" @click="handleGenerateGapAnalysis">
+                {{ gapAnalysis ? '刷新分析' : '生成 AI 分析' }}
+              </el-button>
+            </div>
+          </template>
+          <p v-if="!gapAnalysis" style="color: #6b7280; margin: 0">点击按钮生成对所有未解决问题的汇总分析与分类建议。</p>
+          <p v-else style="line-height: 1.8; margin: 0" class="md-content" v-html="renderSimpleMarkdown(gapAnalysis)"></p>
+        </el-card>
         <el-table :data="gaps" v-loading="gapLoading" stripe>
           <el-table-column prop="question" label="未命中问题" min-width="300" show-overflow-tooltip />
           <el-table-column prop="user_name" label="提问人" width="100" />
@@ -145,6 +160,21 @@
           <span v-if="currentFeedback.feedback_type === 'useful'">—</span>
           <span v-else>{{ currentFeedback.correction_text || '未填写' }}</span>
         </p>
+        <h4 style="margin: 12px 0 8px">AI 处理建议</h4>
+        <div style="background: #fffbeb; padding: 12px; border-radius: 8px; min-height: 48px">
+          <div v-if="aiSuggestion" style="margin: 0 0 8px" class="md-content" v-html="renderSimpleMarkdown(aiSuggestion)"></div>
+          <p v-else-if="currentFeedback.status !== 'pending'" style="color: #9ca3af; margin: 0">已处理的反馈不生成 AI 建议</p>
+          <p v-else style="color: #9ca3af; margin: 0">尚未生成 AI 建议</p>
+          <el-button
+            v-if="currentFeedback.status === 'pending'"
+            size="small"
+            type="warning"
+            :loading="suggestionLoading"
+            @click="handleGenerateSuggestion"
+          >
+            {{ aiSuggestion ? '重新生成' : '生成 AI 建议' }}
+          </el-button>
+        </div>
       </div>
       <el-form label-width="80px">
         <el-form-item label="处理状态">
@@ -170,8 +200,9 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getTickets, updateTicket, getTicketStats } from '../api/tickets'
 import { ticketTypeLabel, ticketStatusLabel, ticketStatusType } from '../utils/ticketLabels'
-import { getFeedbacks, handleFeedback } from '../api/feedback'
-import { getGaps, resolveGap as resolveGapApi } from '../api/gaps'
+import { getFeedbacks, handleFeedback, getFeedbackSuggestion, generateFeedbackSuggestion } from '../api/feedback'
+import { getGaps, resolveGap as resolveGapApi, getGapAnalysis, generateGapAnalysis } from '../api/gaps'
+import { renderSimpleMarkdown } from '../utils/markdown'
 
 const activeTab = ref('tickets')
 
@@ -197,6 +228,8 @@ const pendingFeedbacks = ref(0)
 const handleFeedbackVisible = ref(false)
 const currentFeedback = ref({})
 const handleFeedbackForm = reactive({ status: 'resolved', handle_note: '' })
+const aiSuggestion = ref('')
+const suggestionLoading = ref(false)
 
 // 知识缺口相关
 const gapLoading = ref(false)
@@ -204,6 +237,8 @@ const gaps = ref([])
 const gapPage = ref(1)
 const gapTotal = ref(0)
 const unresolvedGaps = ref(0)
+const gapAnalysis = ref('')
+const gapAnalysisLoading = ref(false)
 
 // 工单相关函数（ticketTypeLabel 等见 utils/ticketLabels.js）
 
@@ -279,11 +314,33 @@ async function fetchFeedbacks() {
   } catch (e) {} finally { feedbackLoading.value = false }
 }
 
-function showHandleFeedback(row) {
+async function showHandleFeedback(row) {
   currentFeedback.value = row
   handleFeedbackForm.status = 'resolved'
   handleFeedbackForm.handle_note = ''
+  aiSuggestion.value = row.ai_suggestion || ''
   handleFeedbackVisible.value = true
+  if (row.ai_suggestion) return
+  try {
+    const res = await getFeedbackSuggestion(row.id)
+    aiSuggestion.value = res.data?.suggestion || ''
+  } catch (e) {}
+}
+
+async function handleGenerateSuggestion() {
+  if (currentFeedback.value.status !== 'pending') return
+  suggestionLoading.value = true
+  const isRegenerate = !!aiSuggestion.value
+  try {
+    const res = await generateFeedbackSuggestion(currentFeedback.value.id, isRegenerate)
+    aiSuggestion.value = res.data?.suggestion || ''
+    currentFeedback.value.ai_suggestion = aiSuggestion.value
+    ElMessage.success(isRegenerate ? 'AI 建议已重新生成' : 'AI 建议已生成')
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '生成失败')
+  } finally {
+    suggestionLoading.value = false
+  }
 }
 
 async function submitHandleFeedback() {
@@ -304,6 +361,26 @@ async function fetchGaps() {
   } catch (e) {} finally { gapLoading.value = false }
 }
 
+async function fetchGapAnalysis() {
+  try {
+    const res = await getGapAnalysis()
+    gapAnalysis.value = res.data?.content || ''
+  } catch (e) {}
+}
+
+async function handleGenerateGapAnalysis() {
+  gapAnalysisLoading.value = true
+  try {
+    const res = await generateGapAnalysis()
+    gapAnalysis.value = res.data?.content || ''
+    ElMessage.success('AI 分析已生成')
+  } catch (e) {
+    ElMessage.error('生成失败')
+  } finally {
+    gapAnalysisLoading.value = false
+  }
+}
+
 async function resolveGap(row) {
   await ElMessageBox.confirm('确认将此问题标记为已解决？', '提示')
   await resolveGapApi(row.id)
@@ -315,7 +392,7 @@ async function resolveGap(row) {
 watch(activeTab, (tab) => {
   if (tab === 'tickets') fetchTickets()
   else if (tab === 'feedback') fetchFeedbacks()
-  else if (tab === 'gaps') fetchGaps()
+  else if (tab === 'gaps') { fetchGaps(); fetchGapAnalysis() }
 })
 
 onMounted(() => {

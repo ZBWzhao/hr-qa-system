@@ -15,3 +15,13 @@ export function handleFeedback(feedbackId, data) {
 export function getFeedbackStats() {
   return request.get('/feedback/stats')
 }
+
+export function getFeedbackSuggestion(feedbackId) {
+  return request.get(`/feedback/${feedbackId}/suggestion`)
+}
+
+export function generateFeedbackSuggestion(feedbackId, force = false) {
+  return request.post(`/feedback/${feedbackId}/suggestion`, null, {
+    params: force ? { force: 1 } : {},
+  })
+}

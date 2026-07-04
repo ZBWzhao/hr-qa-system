@@ -9,9 +9,10 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.response import success, error
 from app.schemas.qa import ChatRequest, ChatResponse
-from app.models.qa import QARecord, FAQ, Rule, QAMiss
+from app.models.qa import QARecord, Rule, QAMiss
 from app.models.document import Document, DocumentChunk
 from app.models.user import User
+from app.models.notice import Notice
 from app.models.ticket import Ticket
 from app.services.rag.vectorstore import search_similar
 from app.services.llm import (
@@ -20,9 +21,10 @@ from app.services.llm import (
     generate_clarification,
     generate_knowledge_answer,
     is_ai_service_error,
+    sanitize_user_facing_text,
+    generate_interpretation_answer,
 )
 from app.services.text_splitter import extract_keywords
-import jieba
 from app.services.conversation_state_service import ConversationStateService
 from app.services.slot_extractor import extract_slots_for_intent
 from app.services.ticket_intent_service import (
@@ -56,6 +58,25 @@ from app.services.ticket_flow_service import (
     normalize_ticket_filled,
     ticket_draft_display_fields,
     _is_field_change_intent,
+)
+from app.services.knowledge_search_service import (
+    search_active_notices,
+    search_document_vectors,
+    should_prefer_dynamic_knowledge,
+    build_knowledge_context,
+    search_documents_by_keyword,
+    find_published_document_by_title,
+    list_published_document_titles,
+)
+from app.services.typo_corrector import normalize_question_typos
+from app.services.notice_flow_service import (
+    is_notice_publish_intent,
+    is_notice_confirm_intent,
+    is_notice_cancel_intent,
+    parse_notice_fields,
+    infer_notice_type,
+    should_pin_notice,
+    build_notice_confirm_answer,
 )
 from app.services.followup_service import (
     is_followup_question,
@@ -101,15 +122,25 @@ def _ai_enhance_answer(
     source_label: str = "标准答案",
     context_hint: str = "",
     fallback: str = "",
+    interpret_mode: bool = False,
+    user_profile: str = "",
 ) -> str:
     """将 FAQ/规则/制度知识经 AI 改写为自然回答；失败时回退到 fallback"""
-    ai_answer = generate_knowledge_answer(
-        question=question,
-        knowledge=knowledge,
-        history=history,
-        source_label=source_label,
-        context_hint=context_hint,
-    )
+    if interpret_mode:
+        ai_answer = generate_interpretation_answer(
+            question=question,
+            knowledge=knowledge,
+            user_profile=user_profile,
+            history=history,
+        )
+    else:
+        ai_answer = generate_knowledge_answer(
+            question=question,
+            knowledge=knowledge,
+            history=history,
+            source_label=source_label,
+            context_hint=context_hint,
+        )
     if ai_answer and not is_ai_service_error(ai_answer):
         return ai_answer
     return fallback or knowledge
@@ -123,6 +154,217 @@ def _followup_context_hint(followup_context: dict) -> str:
     if not topic_name:
         return ""
     return f"用户当前问题是对之前「{topic_name}」相关话题的追问，请结合上下文作答。"
+
+
+def _is_plain_language_request(question: str) -> bool:
+    return any(kw in question for kw in (
+        "通俗", "白话", "解读", "什么意思", "帮我理解", "简单解释",
+        "用通俗", "讲解", "看不懂", "用人话",
+    ))
+
+
+def _is_personal_rights_request(question: str) -> bool:
+    return any(kw in question for kw in (
+        "我的权益", "我有什么福利", "我享有", "对我有什么", "我能不能享受",
+        "我有没有资格", "和我有关", "我符合吗", "我这种情况", "个人权益",
+    ))
+
+
+def _build_user_profile_text(user: User) -> str:
+    parts = [f"姓名：{user.real_name}"]
+    if user.hire_date:
+        parts.append(f"入职日期：{user.hire_date.strftime('%Y-%m-%d')}")
+    if user.probation_end_date:
+        parts.append(f"试用期结束：{user.probation_end_date.strftime('%Y-%m-%d')}")
+    if user.contract_end_date:
+        parts.append(f"合同到期：{user.contract_end_date.strftime('%Y-%m-%d')}")
+    return "\n".join(parts)
+
+
+def _extract_document_title_reference(question: str) -> Optional[str]:
+    patterns = (
+        r"《([^》]+)》",
+        r'"([^"]+)"',
+        r'"([^"]+)"',
+        r"(?:解读|解释|说明|介绍|讲讲).*?(员工[\u4e00-\u9fff]{2,18}(?:办法|制度|规定|管理办法))",
+        r"([\u4e00-\u9fff]{4,22}(?:办法|制度|规定|管理办法))",
+    )
+    for pattern in patterns:
+        m = re.search(pattern, question)
+        if m:
+            title = m.group(1).strip().strip('《》""\'\'')
+            if len(title) >= 4:
+                return title
+    return None
+
+
+def _is_onboarding_prep_question(question: str) -> bool:
+    if not any(k in question for k in ("入职", "报到", "新员工")):
+        return False
+    return any(k in question for k in ("准备", "材料", "带什么", "要带", "携带", "手续"))
+
+
+def _is_onboarding_prep_ambiguous(question: str) -> bool:
+    if not _is_onboarding_prep_question(question):
+        return False
+    if any(k in question for k in ("HR", "人力资源", "部门准备", "部门要")):
+        return False
+    if any(k in question for k in ("新员工", "本人", "我带", "携带", "材料", "要带", "当天")):
+        return False
+    return True
+
+
+def _extract_doc_section(content: str, start_marker: str, end_marker: str = "") -> str:
+    if not content:
+        return ""
+    start = content.find(start_marker)
+    if start < 0:
+        return ""
+    segment = content[start:]
+    if end_marker:
+        end = segment.find(end_marker, len(start_marker))
+        if end > 0:
+            segment = segment[:end]
+    return segment.strip()
+
+
+def _try_document_interpretation_answer(
+    db: Session,
+    user_id: int,
+    conv_id: str,
+    question: str,
+    user: User,
+) -> Optional[dict]:
+    if not _is_plain_language_request(question):
+        return None
+
+    title_hint = _extract_document_title_reference(question)
+    doc = find_published_document_by_title(db, title_hint) if title_hint else None
+
+    if not doc and title_hint:
+        kw_hits = search_documents_by_keyword(db, title_hint, limit=1)
+        if kw_hits:
+            doc = db.query(Document).filter(Document.id == kw_hits[0]["doc_id"]).first()
+
+    if not doc:
+        if any(k in question for k in ("哪些文档", "什么文档", "有哪些制度", "能解读什么")):
+            titles = list_published_document_titles(db)
+            lines = "\n".join(f"- 《{t}》" for t in titles) if titles else "- （暂无已发布制度文档）"
+            answer = (
+                "您可以通过以下方式使用**通俗解读**功能：\n\n"
+                f"**已发布制度文档：**\n{lines}\n\n"
+                "**提问示例：**\n"
+                "- 通俗解读一下《员工入职与转正管理办法》\n"
+                "- 用白话解释一下考勤管理制度\n\n"
+                "我会基于文档原文为您解读，并结合您的入职信息说明对您意味着什么。"
+            )
+            record = QARecord(
+                user_id=user_id, question=question, answer=answer,
+                answer_type="clarification", source_docs=json.dumps([]), conversation_id=conv_id,
+            )
+            db.add(record)
+            db.commit()
+            db.refresh(record)
+            return success({
+                "answer": answer, "answer_type": "clarification", "source_docs": [],
+                "record_id": record.id, "conversation_id": conv_id,
+                "required_slots": [], "filled_slots": {}, "actions": [],
+            })
+        return None
+
+    if not doc.content_text:
+        return None
+
+    knowledge = f"【{doc.title}】\n{doc.content_text[:3500]}"
+    user_profile = _build_user_profile_text(user) if _is_personal_rights_request(question) else ""
+    history = get_conversation_context(db, user_id, conv_id)
+    answer = _ai_enhance_answer(
+        question=question,
+        knowledge=knowledge,
+        history=history,
+        source_label=f"制度文档《{doc.title}》",
+        context_hint="请严格基于上述文档原文进行通俗解读，不要编造文档中未出现的内容。",
+        fallback=doc.content_text[:1200],
+        interpret_mode=True,
+        user_profile=user_profile,
+    )
+    sources = [{"type": "document", "doc_id": doc.id, "title": doc.title, "chunk": doc.content_text[:100]}]
+    record = QARecord(
+        user_id=user_id, question=question, answer=answer,
+        answer_type="rag", source_docs=json.dumps(sources), conversation_id=conv_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return success({
+        "answer": answer, "answer_type": "rag", "source_docs": sources,
+        "record_id": record.id, "conversation_id": conv_id,
+        "required_slots": [], "filled_slots": {}, "actions": [],
+    })
+
+
+def _try_onboarding_prep_answer(
+    db: Session,
+    user_id: int,
+    conv_id: str,
+    question: str,
+    user: User,
+) -> Optional[dict]:
+    if not _is_onboarding_prep_question(question):
+        return None
+
+    doc = find_published_document_by_title(db, "员工入职与转正管理办法")
+    if not doc:
+        hits = search_documents_by_keyword(db, "入职准备", limit=1)
+        if hits:
+            doc = db.query(Document).filter(Document.id == hits[0]["doc_id"]).first()
+    if not doc or not doc.content_text:
+        return None
+
+    is_hr = user.role in ("hr", "admin")
+    explicit_hr = any(k in question for k in ("HR", "人力资源", "部门准备", "部门要", "HR部门"))
+    explicit_emp = any(k in question for k in ("新员工", "本人", "我带", "携带", "材料", "要带", "当天"))
+
+    if _is_onboarding_prep_ambiguous(question) and not is_hr and not explicit_hr and not explicit_emp:
+        answer = (
+            "关于「入职准备」，通常有两种理解，请问您想了解哪一方面？\n\n"
+            "1. **HR部门准备**：HR在员工入职前需完成的准备工作（发录用通知、准备工位设备等）\n"
+            "2. **新员工准备**：新员工入职当天需携带的材料及注意事项\n\n"
+            "请回复「**HR准备**」或「**新员工准备**」。"
+        )
+        return _save_clarification_response(db, user_id, conv_id, question, answer, "onboarding_prep_clarification")
+
+    if explicit_hr or (is_hr and not explicit_emp):
+        knowledge = _extract_doc_section(doc.content_text, "HR部门", "第三条") or doc.content_text[:1800]
+        context_hint = "用户是HR人员，请重点说明HR部门在员工入职前需完成的准备工作。"
+        resolved_q = "HR部门在员工入职前需要做哪些准备工作？"
+    else:
+        knowledge = _extract_doc_section(doc.content_text, "第三条", "第四章") or doc.content_text[800:2200]
+        context_hint = "用户是新员工或想了解本人需做的准备，请重点说明入职当天需携带的材料和注意事项。"
+        resolved_q = "新员工入职需要准备什么材料和注意事项？"
+
+    history = get_conversation_context(db, user_id, conv_id)
+    answer = _ai_enhance_answer(
+        question=resolved_q,
+        knowledge=knowledge,
+        history=history,
+        source_label=f"制度文档《{doc.title}》",
+        context_hint=context_hint,
+        fallback=knowledge[:800],
+    )
+    sources = [{"type": "document", "doc_id": doc.id, "title": doc.title, "chunk": knowledge[:100]}]
+    record = QARecord(
+        user_id=user_id, question=question, answer=answer,
+        answer_type="rag", source_docs=json.dumps(sources), conversation_id=conv_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return success({
+        "answer": answer, "answer_type": "rag", "source_docs": sources,
+        "record_id": record.id, "conversation_id": conv_id,
+        "required_slots": [], "filled_slots": {}, "actions": [],
+    })
 
 
 def get_or_create_conversation_id(db: Session, user_id: int, conversation_id: str = None) -> str:
@@ -208,54 +450,6 @@ def _save_policy_response(
     })
 
 
-def _save_faq_response(
-    db: Session,
-    user_id: int,
-    conv_id: str,
-    question: str,
-    faq: FAQ,
-    history: str = "",
-    context_hint: str = "",
-) -> dict:
-    """保存并返回 FAQ 回答（经 AI 润色）"""
-    knowledge = f"标准问题：{faq.question}\n标准答案：{faq.answer}"
-    fallback = (
-        f"根据公司规定，{faq.answer}"
-        if faq.answer
-        else f"关于「{faq.question}」，请参考公司相关制度。"
-    )
-    answer = _ai_enhance_answer(
-        question=question,
-        knowledge=knowledge,
-        history=history,
-        source_label="标准FAQ",
-        context_hint=context_hint,
-        fallback=fallback,
-    )
-    source_docs = [{"faq_id": faq.id, "question": faq.question}]
-    record = QARecord(
-        user_id=user_id,
-        question=question,
-        answer=answer,
-        answer_type="faq",
-        source_docs=json.dumps(source_docs),
-        conversation_id=conv_id,
-    )
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    return success({
-        "answer": answer,
-        "answer_type": "faq",
-        "source_docs": source_docs,
-        "record_id": record.id,
-        "conversation_id": conv_id,
-        "required_slots": [],
-        "filled_slots": {},
-        "actions": [],
-    })
-
-
 def _save_rule_response(
     db: Session,
     user_id: int,
@@ -264,6 +458,8 @@ def _save_rule_response(
     rule: Rule,
     history: str = "",
     context_hint: str = "",
+    interpret_mode: bool = False,
+    user_profile: str = "",
 ) -> dict:
     """保存并返回规则匹配回答（经 AI 润色）"""
     knowledge = f"规则名称：{rule.name}\n规定内容：\n{rule.answer_template}"
@@ -275,6 +471,8 @@ def _save_rule_response(
         source_label="公司规则",
         context_hint=context_hint,
         fallback=fallback,
+        interpret_mode=interpret_mode,
+        user_profile=user_profile,
     )
     source_docs = [{"rule_id": rule.id, "name": rule.name}]
     record = QARecord(
@@ -379,7 +577,7 @@ def _try_annual_leave_followup_answer(
     )
 
 
-def get_conversation_context(db: Session, user_id: int, conversation_id: str, limit: int = 3) -> str:
+def get_conversation_context(db: Session, user_id: int, conversation_id: str, limit: int = 5) -> str:
     """获取对话历史上下文"""
     if not conversation_id:
         return ""
@@ -391,8 +589,8 @@ def get_conversation_context(db: Session, user_id: int, conversation_id: str, li
         return ""
     context = "以下是之前的对话记录：\n"
     for r in reversed(records):
-        q = r.question[:50] if r.question else ""
-        a = r.answer[:100] if r.answer else ""
+        q = r.question[:80] if r.question else ""
+        a = r.answer[:180] if r.answer else ""
         context += f"问：{q}\n答：{a}\n\n"
     return context
 
@@ -770,6 +968,200 @@ def handle_ticket_type_select(question: str, state, user_id: int, db: Session) -
 
     state_service.clear_pending_intent(user_id, conv_id)
     return _begin_ticket_flow(question, conv_id, user_id, db, ticket_type)
+
+
+NOTICE_CONFIRM_ACTIONS = [
+    {"type": "confirm_submit", "label": "确认发布"},
+    {"type": "modify", "label": "继续修改"},
+]
+
+
+def _start_notice_publish(question: str, conv_id: str, user_id: int, db: Session) -> dict:
+    state_service = ConversationStateService(db)
+    state_service.set_pending_intent(
+        user_id=user_id,
+        conversation_id=conv_id,
+        intent="notice_publish",
+        required_slots=["title", "content"],
+    )
+    filled = parse_notice_fields(question, {})
+    if filled:
+        state_service.update_filled_slots(user_id, conv_id, filled)
+    if filled.get("title") and filled.get("content"):
+        return _build_notice_confirm(question, conv_id, user_id, db, state_service)
+
+    answer = (
+        "好的，我来帮您发布公告。\n\n"
+        "请提供公告 **标题** 和 **内容**，例如：\n"
+        "「公告标题: 提前下班, 公告内容: 2026年7月4日允许17:00下班」\n\n"
+        "也可以分两句话说明。确认前我会展示预览；回复「取消」可放弃。"
+    )
+    record = QARecord(
+        user_id=user_id,
+        question=question,
+        answer=answer,
+        answer_type="notice_clarification",
+        source_docs=json.dumps([]),
+        conversation_id=conv_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return success({
+        "answer": answer,
+        "answer_type": "notice_clarification",
+        "intent": "notice_publish",
+        "source_docs": [],
+        "record_id": record.id,
+        "conversation_id": conv_id,
+        "required_slots": ["title", "content"],
+        "filled_slots": filled,
+        "actions": [],
+    })
+
+
+def _build_notice_confirm(question: str, conv_id: str, user_id: int, db: Session, state_service: ConversationStateService) -> dict:
+    filled = state_service.get_filled_slots(user_id, conv_id)
+    answer = build_notice_confirm_answer(filled)
+    state_service.resume_ticket(user_id, conv_id, "waiting_for_confirm")
+    record = QARecord(
+        user_id=user_id,
+        question=question,
+        answer=answer,
+        answer_type="notice_confirm",
+        source_docs=json.dumps([]),
+        conversation_id=conv_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return success({
+        "answer": answer,
+        "answer_type": "notice_confirm",
+        "intent": "notice_publish",
+        "source_docs": [],
+        "record_id": record.id,
+        "conversation_id": conv_id,
+        "required_slots": ["title", "content"],
+        "filled_slots": filled,
+        "actions": NOTICE_CONFIRM_ACTIONS,
+        "show_confirm_card": True,
+    })
+
+
+def handle_notice_pending(question: str, state, user_id: int, db: Session, action: Optional[str] = None) -> dict:
+    conv_id = state.conversation_id
+    state_service = ConversationStateService(db)
+    if is_notice_cancel_intent(question):
+        state_service.clear_pending_intent(user_id, conv_id)
+        answer = "已取消公告发布。如需重新发布，请再次说明公告标题和内容。"
+        record = QARecord(
+            user_id=user_id, question=question, answer=answer,
+            answer_type="notice_clarification", source_docs=json.dumps([]), conversation_id=conv_id,
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        return success({
+            "answer": answer, "answer_type": "notice_clarification", "record_id": record.id,
+            "conversation_id": conv_id, "actions": [],
+        })
+
+    filled = state_service.get_filled_slots(user_id, conv_id)
+    filled.update(parse_notice_fields(question, filled))
+    state_service.update_filled_slots(user_id, conv_id, filled)
+
+    if filled.get("title") and filled.get("content"):
+        return _build_notice_confirm(question, conv_id, user_id, db, state_service)
+
+    missing = []
+    if not filled.get("title"):
+        missing.append("标题")
+    if not filled.get("content"):
+        missing.append("内容")
+    answer = f"还需要补充公告{'、'.join(missing)}。请按「公告标题: …, 公告内容: …」格式发送。"
+    record = QARecord(
+        user_id=user_id, question=question, answer=answer,
+        answer_type="notice_clarification", source_docs=json.dumps([]), conversation_id=conv_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return success({
+        "answer": answer,
+        "answer_type": "notice_clarification",
+        "intent": "notice_publish",
+        "record_id": record.id,
+        "conversation_id": conv_id,
+        "filled_slots": filled,
+        "actions": [],
+    })
+
+
+def handle_notice_confirm(question: str, state, user_id: int, db: Session, action: Optional[str] = None) -> dict:
+    conv_id = state.conversation_id
+    state_service = ConversationStateService(db)
+
+    if action == "modify" or question.strip() in ("继续修改", "修改"):
+        state_service.resume_ticket(user_id, conv_id, "waiting_for_slot")
+        answer = "已进入修改模式。请直接说明要修改的标题或内容。"
+        record = QARecord(
+            user_id=user_id, question=question, answer=answer,
+            answer_type="notice_clarification", source_docs=json.dumps([]), conversation_id=conv_id,
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        return success({
+            "answer": answer, "answer_type": "notice_clarification",
+            "record_id": record.id, "conversation_id": conv_id, "actions": [],
+        })
+
+    if not is_notice_confirm_intent(question, action):
+        return handle_notice_pending(question, state, user_id, db, action)
+
+    filled = state_service.get_filled_slots(user_id, conv_id)
+    title = (filled.get("title") or "").strip()
+    content = (filled.get("content") or "").strip()
+    if not title or not content:
+        state_service.resume_ticket(user_id, conv_id, "waiting_for_slot")
+        return handle_notice_pending(question, state, user_id, db, action)
+
+    notice = Notice(
+        title=title,
+        content=content,
+        notice_type=infer_notice_type(title, content),
+        is_pinned=1 if should_pin_notice(title, content) else 0,
+        publisher_id=user_id,
+    )
+    db.add(notice)
+    db.commit()
+    db.refresh(notice)
+    state_service.clear_pending_intent(user_id, conv_id)
+
+    answer = (
+        f"公告已发布成功！\n\n"
+        f"**标题：** {title}\n"
+        f"**编号：** #{notice.id}\n\n"
+        "员工可在「通知公告」页面查看。如需修改，请前往 HR 后台「通知发布」。"
+    )
+    record = QARecord(
+        user_id=user_id, question=question, answer=answer,
+        answer_type="notice_published", source_docs=json.dumps([]), conversation_id=conv_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return success({
+        "answer": answer,
+        "answer_type": "notice_published",
+        "intent": "notice_publish",
+        "source_docs": [],
+        "record_id": record.id,
+        "conversation_id": conv_id,
+        "notice_id": notice.id,
+        "actions": [],
+    })
 
 
 def handle_ticket_create(question: str, conv_id: str, user_id: int, db: Session) -> dict:
@@ -1503,84 +1895,6 @@ def handle_ticket_confirm(question: str, state, user_id: int, db: Session, actio
     )
 
 
-def match_faq(db: Session, question: str, conversation_topic: str = ""):
-    """关键词匹配FAQ，不调用API"""
-    keywords = extract_keywords(question)
-    faqs = db.query(FAQ).filter(FAQ.status == 1).all()
-
-    common_words = {'如何', '怎么', '什么', '为什么', '请', '帮我', '告诉', '一下',
-                    '一些', '这个', '那个', '可以', '能否', '是否', '有没有', '想',
-                    '知道', '了解', '咨询', '询问', '问', '答', '回答', '问题',
-                    '这样', '现在', '公司', '规定', '有没有', '积累'}
-
-    best_match = None
-    best_score = 0
-    best_matched = []
-
-    q_lower = question.lower()
-    user_kw_set = set(keywords)
-
-    for faq in faqs:
-        score = 0
-        matched = []
-
-        if faq.question and (faq.question.lower() in q_lower or q_lower in faq.question.lower()):
-            score += 10
-
-        faq_q_words = {w for w in jieba.lcut(faq.question or "") if len(w) >= 2}
-        faq_kw_set = set()
-        if faq.keywords:
-            faq_kw_set = {k.strip() for k in faq.keywords.split(",") if k.strip()}
-
-        faq_text = (faq.question or "") + "," + (faq.keywords or "")
-
-        for kw in keywords:
-            if not kw or kw in common_words:
-                continue
-
-            if kw in faq_kw_set:
-                score += 4
-                matched.append(kw)
-            elif kw in faq_q_words:
-                score += 3
-                matched.append(kw)
-            elif len(kw) >= 3 and kw in (faq.question or ""):
-                score += 2
-                matched.append(kw)
-
-        # 会话主题一致加分
-        if conversation_topic == "salary_welfare":
-            if any(k in faq_text for k in ("福利", "工龄", "年终奖")):
-                score += 5
-            if any(k in faq_text for k in ("文档", "AI", "查重")):
-                score -= 8
-
-        if conversation_topic == "annual_leave":
-            if any(k in faq_text for k in ("年假", "工龄", "休假")):
-                score += 5
-
-        # 用户问福利/工龄，惩罚无关 FAQ（如工作文档）
-        if any(k in user_kw_set for k in ("福利", "工龄")) or "福利" in question:
-            if any(k in faq_text for k in ("福利", "工龄", "年终奖")):
-                score += 3
-            elif any(k in faq_text for k in ("文档", "AI", "查重", "写作")):
-                score -= 10
-
-        if score > best_score:
-            best_score = score
-            best_match = faq
-            best_matched = matched
-
-    if best_match and best_score >= 3:
-        all_common = all(kw in common_words for kw in best_matched if kw)
-        if all_common and best_score < 6:
-            return None
-
-        best_match.view_count += 1
-        return best_match
-    return None
-
-
 def match_rule(db: Session, question: str):
     """关键词匹配规则，不调用API"""
     keywords = extract_keywords(question)
@@ -1609,6 +1923,7 @@ def rag_search_and_generate(
     history: str = "",
     skip_intent_clarification: bool = False,
     context_hint: str = "",
+    precomputed_doc_hits: Optional[list] = None,
 ) -> tuple:
     """RAG搜索 + AI生成回答"""
 
@@ -1636,7 +1951,17 @@ def rag_search_and_generate(
 
         return clarification, [], "need_clarification"
 
-    search_results = search_similar(question, top_k=5)
+    if precomputed_doc_hits is not None:
+        search_results = [
+            {
+                "content": h.get("content", ""),
+                "metadata": {"doc_id": h.get("doc_id")},
+                "score": h.get("score", 0),
+            }
+            for h in precomputed_doc_hits
+        ]
+    else:
+        search_results = search_similar(question, top_k=5)
 
     if not search_results or search_results[0]["score"] < 0.3:
         return None, [], "low_confidence"
@@ -1655,7 +1980,10 @@ def rag_search_and_generate(
 
     context = "\n\n".join(context_parts)
 
-    answer = generate_answer(question, context, history)
+    answer = sanitize_user_facing_text(
+        generate_answer(question, context, history),
+        fallback="根据现有知识库，未找到相关信息，无法回答",
+    )
 
     miss_keywords = ["未找到", "无法回答", "没有找到", "未查询到", "没有相关信息", "暂未找到"]
     is_miss = any(kw in answer for kw in miss_keywords)
@@ -1664,6 +1992,75 @@ def rag_search_and_generate(
         return answer, sources, "low_confidence"
 
     return answer, sources, "high_confidence"
+
+
+def _try_dynamic_knowledge_answer(
+    db: Session,
+    user_id: int,
+    conv_id: str,
+    question: str,
+    resolved_question: str,
+    history: str = "",
+    context_hint: str = "",
+    interpret_mode: bool = False,
+    user_profile: str = "",
+) -> Optional[dict]:
+    """优先使用公告 / 新发布制度文档回答（高于静态 FAQ/规则）"""
+    notice_hits = search_active_notices(db, resolved_question)
+    doc_hits = search_document_vectors(db, resolved_question)
+    prefer, reason = should_prefer_dynamic_knowledge(db, resolved_question, notice_hits, doc_hits)
+
+    if not prefer:
+        kw_hits = search_documents_by_keyword(db, resolved_question)
+        if kw_hits:
+            doc_hits = kw_hits
+            prefer = True
+            reason = "document"
+
+    if not prefer:
+        return None
+
+    notices_for_ctx = notice_hits if reason == "notice" or notice_hits else []
+    docs_for_ctx = doc_hits if reason == "document" or doc_hits else []
+    knowledge, sources = build_knowledge_context(notices_for_ctx, docs_for_ctx)
+    if not knowledge.strip():
+        return None
+
+    if not history:
+        history = get_conversation_context(db, user_id, conv_id)
+
+    answer = _ai_enhance_answer(
+        question=question,
+        knowledge=knowledge,
+        history=history,
+        source_label="公告与制度文档",
+        context_hint=context_hint + "\n请优先依据公告和最新制度文档回答，若与旧规定冲突以最新内容为准。",
+        fallback=knowledge[:800],
+        interpret_mode=interpret_mode,
+        user_profile=user_profile,
+    )
+
+    record = QARecord(
+        user_id=user_id,
+        question=question,
+        answer=answer,
+        answer_type="rag",
+        source_docs=json.dumps(sources),
+        conversation_id=conv_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return success({
+        "answer": answer,
+        "answer_type": "rag",
+        "source_docs": sources,
+        "record_id": record.id,
+        "conversation_id": conv_id,
+        "required_slots": [],
+        "filled_slots": {},
+        "actions": [],
+    })
 
 
 @router.post("")
@@ -1679,7 +2076,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     """
     # Step 1: 获取/创建 conversation_id 和 state
     conv_id = get_or_create_conversation_id(db, current_user.id, data.conversation_id)
-    question = data.question.strip()
+    question = normalize_question_typos(data.question.strip())
 
     if not question:
         return error("请输入问题")
@@ -1746,6 +2143,15 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             if result:
                 return result
 
+        # 公告发布流程
+        elif state.pending_intent == "notice_publish":
+            if state.status == "waiting_for_confirm":
+                result = handle_notice_confirm(question, state, current_user.id, db, data.action)
+            else:
+                result = handle_notice_pending(question, state, current_user.id, db, data.action)
+            if result is not None:
+                return result
+
         else:
             # 其他未知的 pending_intent，清空并走正常流程
             state_service.clear_pending_intent(current_user.id, conv_id)
@@ -1787,6 +2193,26 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
         )
         if welfare_result:
             return welfare_result
+
+        if choice_result.get("inherited_topic") == "onboarding":
+            onboarding_choice_result = _try_onboarding_prep_answer(
+                db, current_user.id, conv_id, resolved_question, current_user,
+            )
+            if onboarding_choice_result:
+                return _attach_paused_notice(onboarding_choice_result)
+
+    # 按文档名通俗解读 / 入职准备（角色区分）
+    interpret_result = _try_document_interpretation_answer(
+        db, current_user.id, conv_id, question, current_user,
+    )
+    if interpret_result:
+        return _attach_paused_notice(interpret_result)
+
+    onboarding_result = _try_onboarding_prep_answer(
+        db, current_user.id, conv_id, question, current_user,
+    )
+    if onboarding_result:
+        return _attach_paused_notice(onboarding_result)
 
     if is_followup_question(question) and not choice_result.get("resolved_question"):
         has_history = recent_context.get("has_history", False)
@@ -1871,11 +2297,9 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
                 state = state_service.get_or_create_state(current_user.id, conv_id)
             return handle_ticket_confirm(question, state, current_user.id, db, data.action)
 
-    # Step 6: 【第三优先级】判断是否是公告意图（公告发布走HR后台，不在聊天中处理）
-    notice_keywords = ['发布公告', '发通知', '发布通知', '发公告', '通知公告', '通知大家', '通知全体员工']
-    if any(kw in question for kw in notice_keywords):
-        if current_user.role not in ('hr', 'admin'):
-            # 员工无权发布公告
+    # Step 6: 【第三优先级】公告发布意图
+    if is_notice_publish_intent(question):
+        if current_user.role not in ("hr", "admin"):
             answer = "抱歉，您没有发布公告的权限。只有 HR 和管理员可以发布公告。\n\n如需发布公告，请联系 HR 部门。"
             record = QARecord(
                 user_id=current_user.id,
@@ -1883,7 +2307,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
                 answer=answer,
                 answer_type="no_permission",
                 source_docs=json.dumps([]),
-                conversation_id=conv_id
+                conversation_id=conv_id,
             )
             db.add(record)
             db.commit()
@@ -1897,33 +2321,9 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
                 "conversation_id": conv_id,
                 "required_slots": [],
                 "filled_slots": {},
-                "actions": []
+                "actions": [],
             })
-        else:
-            # HR发布公告 - 引导到后台页面
-            answer = "通知公告发布请前往 HR 后台的「通知发布」页面操作，支持设置类型、置顶等功能。\n\n如需在聊天中快速发布，请直接告诉我公告标题和内容。"
-            record = QARecord(
-                user_id=current_user.id,
-                question=question,
-                answer=answer,
-                answer_type="notice_clarification",
-                source_docs=json.dumps([]),
-                conversation_id=conv_id
-            )
-            db.add(record)
-            db.commit()
-            db.refresh(record)
-            return success({
-                "answer": answer,
-                "answer_type": "notice_clarification",
-                "intent": "notice_publish",
-                "source_docs": [],
-                "record_id": record.id,
-                "conversation_id": conv_id,
-                "required_slots": [],
-                "filled_slots": {},
-                "actions": []
-            })
+        return _start_notice_publish(question, conv_id, current_user.id, db)
 
     # Step 7: 【第四优先级】判断是否需要年假澄清
     if is_annual_leave_days_question(question):
@@ -1981,61 +2381,21 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     if welfare_calc_result:
         return _attach_paused_notice(welfare_calc_result)
 
-    faq = match_faq(db, resolved_question, conversation_topic=conversation_topic)
+    # Step 8.5: 公告 + 新文档优先（高于规则；FAQ 已下线）
+    followup_hint = _followup_context_hint(followup_context) if is_followup else ""
+    interpret_mode = _is_plain_language_request(question) or _is_personal_rights_request(question)
+    user_profile = _build_user_profile_text(current_user) if _is_personal_rights_request(question) else ""
+    doc_vector_hits = search_document_vectors(db, resolved_question)
+    dynamic_result = _try_dynamic_knowledge_answer(
+        db, current_user.id, conv_id, question, resolved_question,
+        history=context, context_hint=followup_hint,
+        interpret_mode=interpret_mode,
+        user_profile=user_profile,
+    )
+    if dynamic_result:
+        return _attach_paused_notice(dynamic_result)
 
-    # 证明/工单语境：拒绝误匹配的 FAQ（如绩效申诉）
-    if faq and _ticket_context_active(state, recent_context):
-        if is_ticket_confirm_intent(question, data.action) or is_ticket_validation_intent(question) or is_ticket_info_query(question):
-            faq = None
-        else:
-            faq_text = (faq.question or "") + (faq.answer or "") + (faq.keywords or "")
-            if not any(k in faq_text for k in ("证明", "在职", "工单", "开具", "HR")):
-                if any(k in faq_text for k in ("绩效", "申诉", "请假", "年假", "考勤")):
-                    faq = None
-                elif "提交" in question and "提交" in (faq.question or ""):
-                    faq = None
-
-    # 证明办理语境：拒绝明显无关的 FAQ（如绩效申诉）
-    if faq and conversation_topic == "certify_ticket":
-        faq_text = (faq.question or "") + (faq.answer or "") + (faq.keywords or "")
-        if not any(k in faq_text for k in ("证明", "在职", "工单", "开具", "HR")):
-            if any(k in faq_text for k in ("绩效", "申诉", "请假", "年假", "考勤")):
-                faq = None
-
-    # follow-up 问题的主题验证：确保匹配的 FAQ 与上下文主题一致
-    if faq and is_followup and followup_context.get("inherited_topic"):
-        topic = followup_context["inherited_topic"]
-        faq_text = (faq.question + " " + (faq.answer or "") + " " + (faq.keywords or "")).lower()
-
-        # 主题关键词验证
-        topic_keywords = {
-            "annual_leave": ["年假", "工龄", "年休假", "带薪"],
-            "leave_application": ["请假", "病假", "事假", "假期", "休假"],
-            "attendance": ["考勤", "打卡", "迟到", "加班"],
-            "salary": ["工资", "薪资", "社保", "报销"],
-            "salary_welfare": ["福利", "工龄", "年终奖", "礼金", "补贴"],
-            "probation": ["试用", "转正"],
-        }
-
-        expected_keywords = topic_keywords.get(topic, [])
-        if expected_keywords and not any(kw in faq_text for kw in expected_keywords):
-            faq = None
-
-    # 非 followup 但会话主题明确时，拒绝明显不相关的 FAQ
-    if faq and conversation_topic == "salary_welfare":
-        faq_text = (faq.question or "") + (faq.keywords or "")
-        if not any(k in faq_text for k in ("福利", "工龄", "年终奖", "礼金")):
-            if any(k in faq_text for k in ("文档", "AI", "查重")):
-                faq = None
-
-    if faq:
-        context_hint = _followup_context_hint(followup_context) if is_followup else ""
-        return _attach_paused_notice(_save_faq_response(
-            db, current_user.id, conv_id, question, faq,
-            history=context, context_hint=context_hint,
-        ))
-
-    # Step 10: 【原有逻辑】关键词匹配规则
+    # Step 10: 关键词匹配规则
     rule = match_rule(db, resolved_question)
 
     # follow-up 问题的主题验证：确保匹配的规则与上下文主题一致
@@ -2061,6 +2421,8 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
         return _attach_paused_notice(_save_rule_response(
             db, current_user.id, conv_id, question, rule,
             history=context, context_hint=context_hint,
+            interpret_mode=interpret_mode,
+            user_profile=user_profile,
         ))
 
     # Step 11: 【原有逻辑】RAG搜索 + AI生成
@@ -2082,6 +2444,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
         context,
         skip_intent_clarification=skip_clarification,
         context_hint=intent_context_hint,
+        precomputed_doc_hits=doc_vector_hits,
     )
 
     if confidence == "need_clarification":
@@ -2317,3 +2680,23 @@ def get_category_stats(current_user: User = Depends(get_current_user), db: Sessi
     result.sort(key=lambda x: x['value'], reverse=True)
 
     return success(result)
+
+
+@router.get("/top-questions")
+def get_top_questions(limit: int = 8, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """高频提问排行（按相同问句聚合）"""
+    if current_user.role not in ("hr", "admin"):
+        return error("无权限")
+    from sqlalchemy import func
+
+    rows = (
+        db.query(QARecord.question, func.count(QARecord.id).label("cnt"))
+        .group_by(QARecord.question)
+        .order_by(func.count(QARecord.id).desc())
+        .limit(min(limit, 15))
+        .all()
+    )
+    return success([
+        {"question": q[:200], "count": int(cnt)}
+        for q, cnt in rows
+    ])
