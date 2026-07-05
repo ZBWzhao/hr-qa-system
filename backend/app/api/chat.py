@@ -23,6 +23,7 @@ from app.services.llm import (
     is_ai_service_error,
     sanitize_user_facing_text,
     generate_interpretation_answer,
+    build_rule_based_interpretation,
 )
 from app.services.text_splitter import extract_keywords
 from app.services.conversation_state_service import ConversationStateService
@@ -140,7 +141,12 @@ def _ai_enhance_answer(
         )
         if ai_answer and not is_ai_service_error(ai_answer):
             return ai_answer
-        return fallback or _INTERPRET_FALLBACK
+        title = re.match(r"【([^】]+)】", knowledge or "")
+        rule = build_rule_based_interpretation(
+            title.group(1) if title else "制度文档",
+            re.sub(r"^【[^】]+】\s*", "", knowledge or ""),
+        )
+        return rule or fallback or _INTERPRET_FALLBACK
     ai_answer = generate_knowledge_answer(
         question=question,
         knowledge=knowledge,

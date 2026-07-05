@@ -527,6 +527,105 @@ def generate_feedback_handling_suggestion(
     return sanitize_user_facing_text(result.strip(), fallback=result.strip())
 
 
+def sanitize_interpretation_text(text: str, fallback: str = "") -> str:
+    """解读模式专用：比通用 sanitize 更宽松，避免误杀可用回答"""
+    if is_ai_service_error(text):
+        return fallback
+    if not text or not str(text).strip():
+        return fallback
+
+    cleaned = str(text).strip()
+    if looks_like_internal_reasoning(cleaned):
+        extracted = extract_final_answer(cleaned)
+        if extracted and not looks_like_internal_reasoning(extracted):
+            cleaned = extracted
+        elif len(cleaned) >= 80 and "**" in cleaned:
+            pass
+        else:
+            return fallback
+
+    if looks_truncated(cleaned) and len(cleaned) < 80:
+        extracted = extract_final_answer(cleaned)
+        if extracted and len(extracted) >= 40:
+            cleaned = extracted
+        else:
+            return fallback
+
+    return cleaned
+
+
+def _interpretation_legal_score(answer: str) -> int:
+    """条文式表述越多，分数越高（越像原文复述）"""
+    if not answer:
+        return 999
+    t = str(answer)
+    score = len(re.findall(r"第[一二三四五六七八九十百\d]+条", t)) * 3
+    score += len(re.findall(r"第[一二三四五六七八九十百\d]+章", t)) * 5
+    return score
+
+
+def build_rule_based_interpretation(title: str, content: str) -> str:
+    """LLM 不可用或持续复述原文时，本地提炼要点（非逐条抄原文）"""
+    if not content or not str(content).strip():
+        return ""
+
+    bullets: list[str] = []
+    for raw_line in str(content).splitlines():
+        line = raw_line.strip()
+        if not line or re.match(r"^第[一二三四五六七八九十百\d]+章", line):
+            continue
+        m = re.match(r"^第[一二三四五六七八九十百\d]+条\s*(.+)", line)
+        if m:
+            line = m.group(1).strip()
+        line = re.sub(r"^\d+\.\s*", "", line)
+        if len(line) >= 4 and not re.match(r"^第[一二三四五六七八九十百\d]+", line):
+            bullets.append(line)
+
+    if not bullets:
+        return ""
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for b in bullets:
+        if b not in seen:
+            seen.add(b)
+            unique.append(b)
+
+    body = "\n".join(f"- {b}" for b in unique[:10])
+    return (
+        f"**《{title}》通俗要点**\n\n"
+        f"简单说，这份制度核心内容可以概括为：\n\n"
+        f"{body}\n\n"
+        f"*如需某一条的具体含义，可以继续追问，例如「绩效申诉怎么提？」。*"
+    )
+
+
+def _extract_title_from_knowledge(knowledge: str) -> str:
+    m = re.match(r"【([^】]+)】", knowledge or "")
+    return m.group(1).strip() if m else "制度文档"
+
+
+def _extract_content_from_knowledge(knowledge: str) -> str:
+    if not knowledge:
+        return ""
+    return re.sub(r"^【[^】]+】\s*", "", knowledge.strip())
+
+
+def _pick_best_interpretation(candidates: list[str]) -> str:
+    usable = [
+        c for c in candidates
+        if c and not is_ai_service_error(c) and len(c.strip()) >= 40
+    ]
+    if not usable:
+        return ""
+
+    good = [c for c in usable if not looks_like_document_restated(c)]
+    if good:
+        return min(good, key=_interpretation_legal_score)
+
+    return min(usable, key=_interpretation_legal_score)
+
+
 def looks_like_document_restated(answer: str) -> bool:
     """判断回答是否仍在按条文/章节复述原文，而非通俗解读"""
     if not answer or not str(answer).strip():
@@ -597,8 +696,8 @@ def generate_interpretation_answer(
 **实际工作中怎么用**
 （从一般员工视角说明这套制度怎么影响日常）"""
 
-    def _call(extra_user_hint: str = "") -> str:
-        parts = [f"【制度内容（仅供理解，勿复述）】\n{knowledge}"]
+    def _call(extra_user_hint: str = "", knowledge_text: str = knowledge) -> str:
+        parts = [f"【制度内容（仅供理解，勿复述）】\n{knowledge_text}"]
         if user_profile:
             parts.append(f"【员工信息】\n{user_profile}")
         if history:
@@ -611,19 +710,38 @@ def generate_interpretation_answer(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": "\n\n".join(parts)},
         ]
-        raw = call_mimo_api(messages, max_tokens=900, temperature=0.4)
-        return sanitize_user_facing_text(raw, fallback="")
+        raw = call_mimo_api(messages, max_tokens=1200, temperature=0.4)
+        return sanitize_interpretation_text(raw, fallback="")
 
-    result = _call()
-    if result and not is_ai_service_error(result) and not looks_like_document_restated(result):
-        return result
+    candidates = [
+        _call(),
+        _call(
+            "上次输出过于接近原文条文。请完全改写：不要出现「第X章/第X条」，只用口语概括要点。"
+        ),
+    ]
 
-    retry = _call(
-        "上次输出过于接近原文条文。请完全改写：不要出现「第X章/第X条」，只用口语概括要点。"
-    )
-    if retry and not is_ai_service_error(retry) and not looks_like_document_restated(retry):
-        return retry
-    return ""
+    # 文档过长时，用摘要片段再试一次，降低模型逐条抄写倾向
+    plain_content = _extract_content_from_knowledge(knowledge)
+    if len(plain_content) > 1200:
+        short_knowledge = f"【{_extract_title_from_knowledge(knowledge)}】\n{plain_content[:1200]}..."
+        candidates.append(_call(
+            "请基于摘要片段用大白话概括，不要引用章节编号。",
+            knowledge_text=short_knowledge,
+        ))
+
+    best = _pick_best_interpretation(candidates)
+    if best and not looks_like_document_restated(best):
+        return best
+
+    if best and _interpretation_legal_score(best) <= 6:
+        return best
+
+    title = _extract_title_from_knowledge(knowledge)
+    rule_based = build_rule_based_interpretation(title, plain_content)
+    if rule_based:
+        return rule_based
+
+    return best or ""
 
 
 def generate_gap_analysis_summary(questions: list[str]) -> str:
