@@ -72,7 +72,7 @@ def list_gaps(resolved: int = None, page: int = 1, page_size: int = 20, current_
 
     result = []
 
-    for m in items:
+    for idx, m in enumerate(items):
 
         user = db.query(User).filter(User.id == m.user_id).first()
 
@@ -94,7 +94,9 @@ def list_gaps(resolved: int = None, page: int = 1, page_size: int = 20, current_
 
             "resolved_doc_id": m.resolved_doc_id,
 
-            "created_at": m.created_at.isoformat()
+            "created_at": m.created_at.isoformat(),
+
+            "seq": (page - 1) * page_size + idx + 1,
 
         })
 
@@ -198,17 +200,18 @@ def generate_gap_analysis(current_user: User = Depends(require_roles("hr")), db:
 
     )
 
-    questions = [m.question for m in unresolved_items]
+    numbered = [{"seq": i + 1, "text": m.question} for i, m in enumerate(unresolved_items)]
 
     unresolved_count = db.query(QAMiss).filter(QAMiss.resolved == 0).count()
 
-    content = generate_gap_analysis_summary(questions)
+    from app.services.llm import generate_numbered_cluster_analysis
+    content = generate_numbered_cluster_analysis(numbered, "知识缺口", "未命中问题")
 
 
 
     cache = db.query(KnowledgeAnalysisCache).filter(KnowledgeAnalysisCache.cache_key == "gap_summary").first()
 
-    meta = json.dumps({"unresolved_count": unresolved_count, "question_sample_size": len(questions)})
+    meta = json.dumps({"unresolved_count": unresolved_count, "question_sample_size": len(unresolved_items)})
 
     if cache:
 

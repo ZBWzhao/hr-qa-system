@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_MODEL: str = "deepseek-chat"
 
-    # 小米MiMo API配置
-    MIMO_API_KEY: str = "tp-cy4r6zuh0c4goas2xcps1fn114rpdjvbqnqhme7k3k2xox0t"
+    # 小米MiMo API配置（请在 backend/.env 中配置 MIMO_API_KEY）
+    MIMO_API_KEY: str = ""
     MIMO_BASE_URL: str = "https://token-plan-cn.xiaomimimo.com/v1"
     MIMO_MODEL: str = "mimo-v2.5"
 

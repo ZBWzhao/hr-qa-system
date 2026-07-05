@@ -386,6 +386,30 @@ def extract_ticket_slots_with_ai(
         ),
         "certify": "证明开具：need_stamp 用 true/false。",
         "info_change": "信息变更：准确区分原信息与新信息。",
+        "leave_request": (
+            "请假申请特别规则：\n"
+            "1. leave_type 使用标准值：年假/病假/事假/婚假/产假/陪产假/丧假/调休\n"
+            "2. 日期尽量完整，如「7月10日」→「7月10日」\n"
+            "3. reason 是请假事由，简短即可\n"
+        ),
+        "resignation": (
+            "离职申请特别规则：\n"
+            "1. resign_reason 是离职原因，如个人发展、家庭原因等\n"
+            "2. expected_date 是期望离职日期\n"
+            "3. handover_person 是工作交接人姓名，与离职原因分开\n"
+        ),
+        "onboarding_probation": (
+            "入职/转正特别规则：\n"
+            "1. apply_type 使用标准值：转正申请/试用期疑问/入职咨询\n"
+            "2. current_status 是当前状态说明，如「试用期3个月，已满2个月」\n"
+            "3. description 是补充说明\n"
+        ),
+        "reimbursement": (
+            "报销/薪资特别规则：\n"
+            "1. issue_type 使用标准值：报销/薪资/社保/公积金\n"
+            "2. amount_range 是金额范围，如「2000元」「5000元左右」\n"
+            "3. description 是问题说明\n"
+        ),
     }
     hint = type_hints.get(ticket_type, "")
 
@@ -744,34 +768,89 @@ def generate_interpretation_answer(
     return best or ""
 
 
-def generate_gap_analysis_summary(questions: list[str]) -> str:
-    """对全部未解决知识缺口生成汇总分析与分类建议"""
-    if not questions:
-        return "当前没有未解决的知识缺口。"
+def generate_numbered_cluster_analysis(
+    items: list[dict],
+    context_title: str,
+    item_label: str = "问题",
+) -> str:
+    """对带序号条目做主题聚类分析，输出「序号归类 + 可执行建议」"""
+    if not items:
+        return f"当前没有待分析的{item_label}。"
 
-    q_text = "\n".join(f"- {q}" for q in questions[:40])
-    if len(questions) > 40:
-        q_text += f"\n… 共 {len(questions)} 条"
+    lines = []
+    for it in items[:50]:
+        seq = it.get("seq", "?")
+        text = it.get("text", "")
+        extra = it.get("extra", "")
+        if extra:
+            lines.append(f"{seq}. {text}（{extra}）")
+        else:
+            lines.append(f"{seq}. {text}")
+    body = "\n".join(lines)
+    if len(items) > 50:
+        body += f"\n… 共 {len(items)} 条"
 
-    prompt = f"""你是 HR 知识库运营助手。以下是员工提问但未命中知识库的问题列表：
+    prompt = f"""你是 HR 知识库运营助手。以下是「{context_title}」中带序号编号的{item_label}列表：
 
-{q_text}
+{body}
 
-请输出：
-1. **总体概况**（2-3句）：这些问题反映了哪些知识盲区
-2. **分类建议**（按主题分类，如考勤/休假/薪酬/福利/其他）：每类给出 1-2 条可执行的补充建议（如发布哪类公告、补充哪类制度文档）
+请输出 Markdown 格式分析，必须包含：
 
-控制在400字以内，使用 Markdown 标题与列表。只输出最终分析，禁止思考过程。"""
+1. **总体概况**（2-3 句）
+2. **主题归类**（核心要求）：按主题分类，每类必须引用具体序号，格式示例：
+   - **迟到/考勤类**（序号 1、3、6、7）：简要说明共性
+   - **休假类**（序号 2、5）：…
+3. **可执行建议**：每类给出 1-2 条具体行动建议，例如「建议在考勤制度文档中新增或高亮“迟到处理”章节，说明定义、报备流程及影响」
+
+要求：必须引用序号；建议要可落地；总篇幅 500-800 字；只输出最终分析。"""
 
     messages = [
-        {"role": "system", "content": "你是 HR Copilot 知识运营助手。"},
+        {"role": "system", "content": "你是 HR Copilot 知识运营助手，擅长归纳问题并给出文档/公告层面的改进建议。"},
         {"role": "user", "content": prompt},
     ]
-    raw = call_mimo_api(messages, max_tokens=700, temperature=0.25)
+    raw = call_mimo_api(messages, max_tokens=1800, temperature=0.25)
     cleaned = sanitize_user_facing_text(raw, fallback="")
     if cleaned:
         return cleaned
-    return "建议：针对高频未命中问题，补充相应的制度文档或发布通知公告。"
+    return f"建议：针对上述{item_label}，按主题补充制度文档或发布通知公告。"
+
+
+def generate_gap_analysis_summary(questions: list[str]) -> str:
+    """对全部未解决知识缺口生成汇总分析与分类建议（兼容旧调用）"""
+    items = [{"seq": i + 1, "text": q} for i, q in enumerate(questions)]
+    return generate_numbered_cluster_analysis(items, "知识缺口", "未命中问题")
+
+
+def generate_feedback_analysis_summary(items: list[dict]) -> str:
+    """对待处理反馈生成带序号聚类分析"""
+    return generate_numbered_cluster_analysis(items, "员工反馈纠错", "反馈问题")
+
+
+def generate_chart_data_analysis(chart_title: str, data_summary: str) -> str:
+    """对数据看板图表生成解读与结论建议"""
+    if not data_summary or not data_summary.strip():
+        return "当前图表暂无足够数据，无法生成分析结论。"
+
+    prompt = f"""你是 HR 数据分析顾问。请基于以下「{chart_title}」图表数据，输出 Markdown 分析：
+
+{data_summary}
+
+请包含：
+1. **数据解读**（3-5 句）：说明趋势/分布/异常点
+2. **业务结论**（2-3 条）：对 HR 运营意味着什么
+3. **行动建议**（2-3 条）：具体可执行的改进措施
+
+控制在 350 字以内，只输出最终分析。"""
+
+    messages = [
+        {"role": "system", "content": "你是 HR Copilot 数据分析助手。"},
+        {"role": "user", "content": prompt},
+    ]
+    raw = call_mimo_api(messages, max_tokens=900, temperature=0.3)
+    cleaned = sanitize_user_facing_text(raw, fallback="")
+    if cleaned:
+        return cleaned
+    return "建议：持续跟踪该指标变化，结合制度文档与公告更新优化员工体验。"
 
 
 def correct_user_question_typos(text: str) -> str:

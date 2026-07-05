@@ -348,6 +348,8 @@ def init_db():
             Ticket(ticket_no="TK202606010001", type="certify", title="开具在职证明", description="因办理签证需要，请开具在职证明一份，需中英文版本。", status="pending", creator_id=users[2].id),
             Ticket(ticket_no="TK202606010002", type="info_change", title="修改个人信息", description="手机号码变更，需要更新为13800138000。", status="processing", creator_id=users[2].id, assignee_id=users[1].id),
             Ticket(ticket_no="TK202606010003", type="other", title="咨询社保缴纳", description="请问社保缴纳基数是如何确定的？需要提供什么材料？", status="completed", creator_id=users[2].id, assignee_id=users[1].id, resolve_note="社保缴纳基数按照上年度月平均工资确定，无需额外提供材料，系统自动调整。", resolved_at=datetime.now() - timedelta(days=2)),
+            Ticket(ticket_no="TK202606010004", type="leave_request", title="请假申请", description="请假类型：病假\n开始日期：7月10日\n结束日期：7月12日\n请假事由：身体不适需要休息", status="pending", creator_id=users[2].id),
+            Ticket(ticket_no="TK202606010005", type="resignation", title="离职申请", description="离职原因：个人发展原因\n期望离职日期：8月1日\n工作交接人：张三", status="pending", creator_id=users[2].id),
         ]
         for t in tickets:
             db.add(t)

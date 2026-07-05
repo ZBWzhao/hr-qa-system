@@ -84,6 +84,13 @@
               </div>
               <div class="cap-card-desc">证明开具、信息变更、人工处理等 HR 请求</div>
             </div>
+            <div class="cap-card cap-card-guide" @click="$router.push('/newbie-guide')">
+              <div class="cap-card-header">
+                <el-icon :size="24" color="#059669"><Notebook /></el-icon>
+                <span class="cap-card-title">新手指引</span>
+              </div>
+              <div class="cap-card-desc">办公用品、请假报销等速查，快速上手系统</div>
+            </div>
           </div>
 
           <div class="quick-section">
@@ -233,7 +240,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Promotion, ChatDotRound, Star, Select, CloseBold, Plus, Delete, Document, Tickets, Expand, EditPen } from '@element-plus/icons-vue'
+import { Promotion, ChatDotRound, Star, Select, CloseBold, Plus, Delete, Document, Tickets, Expand, EditPen, Notebook } from '@element-plus/icons-vue'
 import { sendChat, saveChatRecord } from '../api/chat'
 import { createFeedback } from '../api/feedback'
 import { toggleFavorite } from '../api/chatHistory'
@@ -375,6 +382,15 @@ const DEFAULT_SLOT_LABELS = {
   exception_type: '异常类型',
   description: '补充说明',
   issue_type: '问题类型',
+  leave_type: '请假类型',
+  start_date: '开始日期',
+  end_date: '结束日期',
+  resign_reason: '离职原因',
+  expected_date: '期望离职日期',
+  handover_person: '工作交接人',
+  apply_type: '申请类型',
+  current_status: '当前状态说明',
+  amount_range: '金额范围',
 }
 
 const TICKET_FORM_CONFIG = {
@@ -399,6 +415,35 @@ const TICKET_FORM_CONFIG = {
     { key: 'issue_type', label: '问题类型', type: 'text', required: true },
     { key: 'description', label: '问题说明', type: 'textarea', required: true },
     { key: 'expected_time', label: '期望处理时间', type: 'text', required: true, placeholder: '例如：3天内' },
+  ],
+  leave_request: [
+    { key: 'leave_type', label: '请假类型', type: 'select', required: true, options: [
+      { value: '年假', label: '年假' }, { value: '病假', label: '病假' }, { value: '事假', label: '事假' },
+      { value: '婚假', label: '婚假' }, { value: '产假', label: '产假' }, { value: '陪产假', label: '陪产假' },
+      { value: '丧假', label: '丧假' }, { value: '调休', label: '调休' },
+    ]},
+    { key: 'start_date', label: '开始日期', type: 'text', required: true, placeholder: '例如：7月10日' },
+    { key: 'end_date', label: '结束日期', type: 'text', required: true, placeholder: '例如：7月12日' },
+    { key: 'reason', label: '请假事由', type: 'textarea', required: true, placeholder: '例如：身体不适需要休息' },
+  ],
+  resignation: [
+    { key: 'resign_reason', label: '离职原因', type: 'textarea', required: true, placeholder: '例如：个人发展原因' },
+    { key: 'expected_date', label: '期望离职日期', type: 'text', required: true, placeholder: '例如：8月1日' },
+    { key: 'handover_person', label: '工作交接人', type: 'text', required: true, placeholder: '例如：张三' },
+  ],
+  onboarding_probation: [
+    { key: 'apply_type', label: '申请类型', type: 'select', required: true, options: [
+      { value: '转正申请', label: '转正申请' }, { value: '试用期疑问', label: '试用期疑问' }, { value: '入职咨询', label: '入职咨询' },
+    ]},
+    { key: 'current_status', label: '当前状态说明', type: 'text', required: true, placeholder: '例如：试用期3个月已满' },
+    { key: 'description', label: '补充说明', type: 'textarea', required: false },
+  ],
+  reimbursement: [
+    { key: 'issue_type', label: '问题类型', type: 'select', required: true, options: [
+      { value: '报销', label: '报销' }, { value: '薪资', label: '薪资' }, { value: '社保', label: '社保' }, { value: '公积金', label: '公积金' },
+    ]},
+    { key: 'amount_range', label: '金额范围', type: 'text', required: false, placeholder: '例如：2000元' },
+    { key: 'description', label: '问题说明', type: 'textarea', required: true },
   ],
 }
 
@@ -430,6 +475,10 @@ const TICKET_FIELD_ORDER = {
   info_change: ['change_item', 'old_value', 'new_value', 'reason'],
   attendance_exception: ['exception_date', 'exception_type', 'reason'],
   other: ['issue_type', 'description', 'expected_time'],
+  leave_request: ['leave_type', 'start_date', 'end_date', 'reason'],
+  resignation: ['resign_reason', 'expected_date', 'handover_person'],
+  onboarding_probation: ['apply_type', 'current_status', 'description'],
+  reimbursement: ['issue_type', 'amount_range', 'description'],
 }
 
 const TICKET_DISPLAY_NAMES = {
@@ -437,6 +486,10 @@ const TICKET_DISPLAY_NAMES = {
   certify: '证明开具',
   info_change: '信息变更',
   other: '人工请求',
+  leave_request: '请假申请',
+  resignation: '离职申请',
+  onboarding_probation: '入职/转正',
+  reimbursement: '报销/薪资',
 }
 
 function ticketDisplayName(msg) {
@@ -804,8 +857,9 @@ onBeforeUnmount(() => {
 .welcome p { color: #6B7280; margin-bottom: 28px; font-size: 14px; line-height: 1.8; max-width: 520px; margin-left: auto; margin-right: auto; }
 
 /* 能力卡片 */
-.capability-cards { display: flex; gap: 16px; justify-content: center; margin-bottom: 28px; max-width: 520px; margin-left: auto; margin-right: auto; }
-.cap-card { flex: 1; padding: 20px; border: 2px solid #e5e7eb; border-radius: 12px; cursor: pointer; text-align: left; transition: all 0.2s; background: #fff; }
+.capability-cards { display: flex; gap: 16px; justify-content: center; margin-bottom: 28px; max-width: 780px; margin-left: auto; margin-right: auto; flex-wrap: wrap; }
+.cap-card { flex: 1; min-width: 200px; padding: 20px; border: 2px solid #e5e7eb; border-radius: 12px; cursor: pointer; text-align: left; transition: all 0.2s; background: #fff; }
+.cap-card-guide:hover { border-color: #34d399; }
 .cap-card:hover { border-color: #fbbf24; }
 .cap-card.active { border-color: #D97706; background: #FFF7ED; }
 .cap-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }

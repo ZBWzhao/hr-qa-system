@@ -19,3 +19,7 @@ export function updateTicket(ticketId, data) {
 export function getTicketStats() {
   return request.get('/tickets/stats')
 }
+
+export function getTicketTypes() {
+  return request.get('/tickets/types')
+}

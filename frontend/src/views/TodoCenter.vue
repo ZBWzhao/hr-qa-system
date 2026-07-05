@@ -21,19 +21,29 @@
       <!-- 工单管理 -->
       <el-tab-pane label="工单管理" name="tickets">
         <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap">
-          <el-select v-model="ticketStatusFilter" placeholder="全部状态" clearable @change="fetchTickets" style="width: 160px">
+          <el-input v-model="ticketKeyword" placeholder="搜索工单号/标题" clearable style="width: 200px" @keyup.enter="onTicketFilterChange" @clear="onTicketFilterChange" />
+          <el-select v-model="ticketStatusFilter" placeholder="全部状态" clearable @change="onTicketFilterChange" style="width: 140px">
             <el-option label="待处理" value="pending" />
             <el-option label="处理中" value="processing" />
             <el-option label="已完成" value="completed" />
             <el-option label="已驳回" value="rejected" />
           </el-select>
+          <el-select v-model="ticketTypeFilter" placeholder="全部类型" clearable @change="onTicketFilterChange" style="width: 140px">
+            <el-option v-for="t in ticketTypes" :key="t.value" :label="t.label" :value="t.value" />
+          </el-select>
+          <el-select v-model="ticketDeptFilter" placeholder="全部部门" clearable @change="onTicketFilterChange" style="width: 160px">
+            <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.id" />
+          </el-select>
+          <el-button type="primary" @click="onTicketFilterChange">搜索</el-button>
         </div>
         <el-table :data="tickets" v-loading="ticketLoading" stripe>
           <el-table-column prop="ticket_no" label="工单号" width="130" />
-          <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-          <el-table-column prop="type" label="类型" width="90">
+          <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="type" label="类型" width="100">
             <template #default="{ row }"><el-tag size="small">{{ ticketTypeLabel(row.type) }}</el-tag></template>
           </el-table-column>
+          <el-table-column prop="department_name" label="部门" width="100" show-overflow-tooltip />
+          <el-table-column prop="creator_name" label="提交人" width="90" />
           <el-table-column prop="status" label="状态" width="80">
             <template #default="{ row }"><el-tag :type="ticketStatusType(row.status)" size="small">{{ ticketStatusLabel(row.status) }}</el-tag></template>
           </el-table-column>
@@ -57,7 +67,20 @@
 
       <!-- 反馈处理 -->
       <el-tab-pane label="反馈处理" name="feedback">
+        <el-card shadow="never" style="margin-bottom: 16px; background: #f8fafc">
+          <template #header>
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <span style="font-weight: 600">AI 反馈汇总分析</span>
+              <el-button type="primary" size="small" :loading="feedbackAnalysisLoading" @click="handleGenerateFeedbackAnalysis">
+                {{ feedbackAnalysis ? '刷新分析' : '生成 AI 分析' }}
+              </el-button>
+            </div>
+          </template>
+          <p v-if="!feedbackAnalysis" style="color: #6b7280; margin: 0">点击按钮对待处理反馈按序号归类分析，并给出文档/公告改进建议。</p>
+          <div v-else class="md-content" style="line-height: 1.8" v-html="renderSimpleMarkdown(feedbackAnalysis)"></div>
+        </el-card>
         <el-table :data="feedbacks" v-loading="feedbackLoading" stripe>
+          <el-table-column prop="seq" label="序号" width="60" />
           <el-table-column prop="question" label="反馈问题" min-width="200" show-overflow-tooltip />
           <el-table-column prop="answer_type" label="回答类型" width="80">
             <template #default="{ row }"><el-tag size="small">{{ answerTypeLabel(row.answer_type) }}</el-tag></template>
@@ -98,10 +121,11 @@
               </el-button>
             </div>
           </template>
-          <p v-if="!gapAnalysis" style="color: #6b7280; margin: 0">点击按钮生成对所有未解决问题的汇总分析与分类建议。</p>
-          <p v-else style="line-height: 1.8; margin: 0" class="md-content" v-html="renderSimpleMarkdown(gapAnalysis)"></p>
+          <p v-if="!gapAnalysis" style="color: #6b7280; margin: 0">点击按钮生成对所有未解决问题的汇总分析与分类建议（按序号归类）。</p>
+          <div v-else class="md-content" style="line-height: 1.8" v-html="renderSimpleMarkdown(gapAnalysis)"></div>
         </el-card>
         <el-table :data="gaps" v-loading="gapLoading" stripe>
+          <el-table-column prop="seq" label="序号" width="60" />
           <el-table-column prop="question" label="未命中问题" min-width="300" show-overflow-tooltip />
           <el-table-column prop="user_name" label="提问人" width="100" />
           <el-table-column prop="resolved" label="状态" width="100">
@@ -198,10 +222,11 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getTickets, updateTicket, getTicketStats } from '../api/tickets'
+import { getTickets, updateTicket, getTicketStats, getTicketTypes } from '../api/tickets'
 import { ticketTypeLabel, ticketStatusLabel, ticketStatusType } from '../utils/ticketLabels'
-import { getFeedbacks, handleFeedback, getFeedbackSuggestion, generateFeedbackSuggestion } from '../api/feedback'
+import { getFeedbacks, handleFeedback, getFeedbackSuggestion, generateFeedbackSuggestion, getFeedbackAnalysis, generateFeedbackAnalysis } from '../api/feedback'
 import { getGaps, resolveGap as resolveGapApi, getGapAnalysis, generateGapAnalysis } from '../api/gaps'
+import { getDepartmentsFlat } from '../api/departments'
 import { renderSimpleMarkdown } from '../utils/markdown'
 
 const activeTab = ref('tickets')
@@ -212,6 +237,11 @@ const tickets = ref([])
 const ticketPage = ref(1)
 const ticketTotal = ref(0)
 const ticketStatusFilter = ref('')
+const ticketTypeFilter = ref('')
+const ticketDeptFilter = ref('')
+const ticketKeyword = ref('')
+const ticketTypes = ref([])
+const departments = ref([])
 const pendingTickets = ref(0)
 const completeVisible = ref(false)
 const rejectVisible = ref(false)
@@ -230,6 +260,8 @@ const currentFeedback = ref({})
 const handleFeedbackForm = reactive({ status: 'resolved', handle_note: '' })
 const aiSuggestion = ref('')
 const suggestionLoading = ref(false)
+const feedbackAnalysis = ref('')
+const feedbackAnalysisLoading = ref(false)
 
 // 知识缺口相关
 const gapLoading = ref(false)
@@ -247,10 +279,26 @@ async function fetchTickets() {
   try {
     const params = { page: ticketPage.value }
     if (ticketStatusFilter.value) params.status = ticketStatusFilter.value
+    if (ticketTypeFilter.value) params.type = ticketTypeFilter.value
+    if (ticketDeptFilter.value) params.department_id = ticketDeptFilter.value
+    if (ticketKeyword.value?.trim()) params.keyword = ticketKeyword.value.trim()
     const res = await getTickets(params)
     tickets.value = res.data?.items || []
     ticketTotal.value = res.data?.total || 0
   } catch (e) {} finally { ticketLoading.value = false }
+}
+
+function onTicketFilterChange() {
+  ticketPage.value = 1
+  fetchTickets()
+}
+
+async function loadTicketFilters() {
+  try {
+    const [typesRes, deptRes] = await Promise.all([getTicketTypes(), getDepartmentsFlat()])
+    ticketTypes.value = typesRes.data || []
+    departments.value = deptRes.data || []
+  } catch (e) {}
 }
 
 async function fetchTicketStats() {
@@ -312,6 +360,26 @@ async function fetchFeedbacks() {
     feedbackTotal.value = res.data?.total || 0
     pendingFeedbacks.value = feedbacks.value.filter(f => f.status === 'pending').length
   } catch (e) {} finally { feedbackLoading.value = false }
+}
+
+async function fetchFeedbackAnalysis() {
+  try {
+    const res = await getFeedbackAnalysis()
+    feedbackAnalysis.value = res.data?.content || ''
+  } catch (e) {}
+}
+
+async function handleGenerateFeedbackAnalysis() {
+  feedbackAnalysisLoading.value = true
+  try {
+    const res = await generateFeedbackAnalysis()
+    feedbackAnalysis.value = res.data?.content || ''
+    ElMessage.success('AI 分析已生成')
+  } catch (e) {
+    ElMessage.error('生成失败')
+  } finally {
+    feedbackAnalysisLoading.value = false
+  }
 }
 
 async function showHandleFeedback(row) {
@@ -391,12 +459,13 @@ async function resolveGap(row) {
 // 标签切换时加载数据
 watch(activeTab, (tab) => {
   if (tab === 'tickets') fetchTickets()
-  else if (tab === 'feedback') fetchFeedbacks()
+  else if (tab === 'feedback') { fetchFeedbacks(); fetchFeedbackAnalysis() }
   else if (tab === 'gaps') { fetchGaps(); fetchGapAnalysis() }
 })
 
 onMounted(() => {
   fetchTickets()
   fetchTicketStats()
+  loadTicketFilters()
 })
 </script>

@@ -28,6 +28,9 @@
       <el-table-column prop="username" label="工号/登录账号" width="120" />
       <el-table-column prop="real_name" label="姓名" width="120" />
       <el-table-column prop="email" label="邮箱" min-width="180" />
+      <el-table-column prop="department_id" label="部门" width="120">
+        <template #default="{ row }">{{ getDeptName(row.department_id) }}</template>
+      </el-table-column>
       <el-table-column prop="role" label="角色" width="120">
         <template #default="{ row }"><el-tag :type="roleType(row.role)" size="small">{{ roleLabel(row.role) }}</el-tag></template>
       </el-table-column>
@@ -66,6 +69,11 @@
             <el-option label="普通员工" value="employee" />
             <el-option label="HR人员" value="hr" />
             <el-option label="管理员" value="admin" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="部门">
+          <el-select v-model="editForm.department_id" placeholder="请选择部门" clearable>
+            <el-option v-for="dept in departments" :key="dept.id" :label="dept.name" :value="dept.id" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -207,6 +215,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Upload, Download } from '@element-plus/icons-vue'
 import { getUsers, updateUser, updateUserStatus, resetPassword, createUser, batchCreateUsers, downloadUserTemplate, parseUserFile } from '../api/users'
+import { getDepartmentsFlat } from '../api/departments'
 
 const loading = ref(false)
 const users = ref([])
@@ -215,7 +224,8 @@ const total = ref(0)
 const statusFilter = ref('')
 const editVisible = ref(false)
 const editId = ref(null)
-const editForm = reactive({ real_name: '', email: '', role: 'employee' })
+const editForm = reactive({ real_name: '', email: '', role: 'employee', department_id: null })
+const departments = ref([])
 
 // 单个添加
 const addSingleVisible = ref(false)
@@ -249,6 +259,12 @@ const batchImportLoading = ref(false)
 const batchResult = ref(null)
 const uploadRef = ref(null)
 
+function getDeptName(deptId) {
+  if (!deptId) return '未分配'
+  const dept = departments.value.find(d => d.id === deptId)
+  return dept ? dept.name : '未知'
+}
+
 function roleType(r) { return { employee: '', hr: 'success', admin: 'danger' }[r] || '' }
 function roleLabel(r) { return { employee: '普通员工', hr: 'HR人员', admin: '管理员' }[r] || r }
 function statusType(s) { return { 0: 'warning', 1: 'success', 2: 'danger', 3: 'info' }[s] || '' }
@@ -267,8 +283,16 @@ async function fetchData() {
 
 function showEdit(row) {
   editId.value = row.id
-  Object.assign(editForm, { real_name: row.real_name, email: row.email, role: row.role })
+  Object.assign(editForm, { real_name: row.real_name, email: row.email, role: row.role, department_id: row.department_id })
   editVisible.value = true
+  fetchDepartments()
+}
+
+async function fetchDepartments() {
+  try {
+    const res = await getDepartmentsFlat()
+    departments.value = res.data || []
+  } catch (e) {}
 }
 
 async function submitEdit() {
@@ -432,5 +456,8 @@ async function submitBatchImport() {
   }
 }
 
-onMounted(() => fetchData())
+onMounted(() => {
+  fetchData()
+  fetchDepartments()
+})
 </script>

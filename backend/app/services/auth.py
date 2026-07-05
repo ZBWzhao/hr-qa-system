@@ -42,8 +42,16 @@ def authenticate_user(db: Session, username: str, password: str):
     return user, None
 
 
-def create_user_token(user: User) -> dict:
+def create_user_token(user: User, db: Session = None) -> dict:
     access_token = create_access_token(data={"sub": str(user.id)})
+
+    # 获取部门名称
+    department_name = None
+    if user.department_id and db:
+        dept = db.query(Department).filter(Department.id == user.department_id).first()
+        if dept:
+            department_name = dept.name
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -52,6 +60,7 @@ def create_user_token(user: User) -> dict:
             "username": user.username,
             "real_name": user.real_name,
             "role": user.role,
-            "department_id": user.department_id
+            "department_id": user.department_id,
+            "department_name": department_name
         }
     }

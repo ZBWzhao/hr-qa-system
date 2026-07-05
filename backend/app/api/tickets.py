@@ -2,12 +2,14 @@ from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_roles
 from app.core.response import success, error, paginated
 from app.schemas.ticket import TicketCreate, TicketUpdate, TicketOut
 from app.models.ticket import Ticket
 from app.models.user import User
+from app.models.department import Department
 
 router = APIRouter()
 
@@ -18,7 +20,16 @@ def generate_ticket_no(db: Session) -> str:
 
 
 @router.get("")
-def list_tickets(status: Optional[str] = None, type: Optional[str] = None, page: int = 1, page_size: int = 20, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_tickets(
+    status: Optional[str] = None,
+    type: Optional[str] = None,
+    department_id: Optional[int] = None,
+    keyword: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     if current_user.role in ("hr", "admin"):
         query = db.query(Ticket)
     else:
@@ -27,9 +38,38 @@ def list_tickets(status: Optional[str] = None, type: Optional[str] = None, page:
         query = query.filter(Ticket.status == status)
     if type:
         query = query.filter(Ticket.type == type)
+    if department_id is not None:
+        query = query.join(User, User.id == Ticket.creator_id).filter(User.department_id == department_id)
+    if keyword and keyword.strip():
+        kw = f"%{keyword.strip()}%"
+        query = query.filter(or_(Ticket.title.like(kw), Ticket.ticket_no.like(kw), Ticket.description.like(kw)))
     total = query.count()
     items = query.order_by(Ticket.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
-    return paginated([TicketOut.model_validate(t).model_dump() for t in items], total, page, page_size)
+    result = []
+    for t in items:
+        d = TicketOut.model_validate(t).model_dump()
+        creator = db.query(User).filter(User.id == t.creator_id).first()
+        d["creator_name"] = creator.real_name if creator else "未知"
+        if creator and creator.department_id:
+            dept = db.query(Department).filter(Department.id == creator.department_id).first()
+            d["department_name"] = dept.name if dept else "未分配"
+            d["department_id"] = creator.department_id
+        else:
+            d["department_name"] = "未分配"
+            d["department_id"] = None
+        result.append(d)
+    return paginated(result, total, page, page_size)
+
+
+@router.get("/types")
+def list_ticket_types(current_user: User = Depends(get_current_user)):
+    """返回系统支持的全部工单类型（与智能问答工单引导一致）"""
+    from app.services.ticket_intent_service import TICKET_SLOT_CONFIG
+    types = [
+        {"value": k, "label": v.get("display_type", k)}
+        for k, v in TICKET_SLOT_CONFIG.items()
+    ]
+    return success(types)
 
 
 @router.get("/stats")

@@ -49,6 +49,47 @@ TICKET_SLOT_CONFIG = {
             "description": "问题说明",
             "expected_time": "期望处理时间"
         }
+    },
+    "leave_request": {
+        "title": "请假申请",
+        "display_type": "请假申请",
+        "required_slots": ["leave_type", "start_date", "end_date", "reason"],
+        "slot_labels": {
+            "leave_type": "请假类型",
+            "start_date": "开始日期",
+            "end_date": "结束日期",
+            "reason": "请假事由"
+        }
+    },
+    "resignation": {
+        "title": "离职申请",
+        "display_type": "离职申请",
+        "required_slots": ["resign_reason", "expected_date", "handover_person"],
+        "slot_labels": {
+            "resign_reason": "离职原因",
+            "expected_date": "期望离职日期",
+            "handover_person": "工作交接人"
+        }
+    },
+    "onboarding_probation": {
+        "title": "转正申请",
+        "display_type": "入职/转正",
+        "required_slots": ["apply_type", "current_status", "description"],
+        "slot_labels": {
+            "apply_type": "申请类型",
+            "current_status": "当前状态说明",
+            "description": "补充说明"
+        }
+    },
+    "reimbursement": {
+        "title": "报销与薪资咨询",
+        "display_type": "报销/薪资",
+        "required_slots": ["issue_type", "amount_range", "description"],
+        "slot_labels": {
+            "issue_type": "问题类型",
+            "amount_range": "金额范围",
+            "description": "问题说明"
+        }
     }
 }
 
@@ -82,6 +123,22 @@ TICKET_TYPE_KEYWORDS = {
     "attendance_exception": {
         "keywords": ['考勤异常', '忘记打卡', '补卡', '打卡异常', '漏打卡', '考勤说明'],
         "action_phrases": ['提交考勤异常', '提交忘记打卡', '申请补卡', '提交打卡异常', '提交考勤说明', '提交忘记打卡说明']
+    },
+    "leave_request": {
+        "keywords": ['请假', '年假', '病假', '事假', '婚假', '产假', '丧假', '调休', '陪产假', '哺乳假'],
+        "action_phrases": ['请假', '申请请假', '请年假', '请病假', '请事假', '申请年假', '申请病假', '申请事假', '申请婚假', '申请产假', '申请调休', '想请假', '要请假']
+    },
+    "resignation": {
+        "keywords": ['离职', '辞职', '离岗', '辞退', '解除劳动合同'],
+        "action_phrases": ['申请离职', '办理离职', '提交离职', '想离职', '要离职', '要辞职', '申请辞职', '办理辞职', '离职手续']
+    },
+    "onboarding_probation": {
+        "keywords": ['转正', '试用期', '入职', '实习转正', '试用期考核'],
+        "action_phrases": ['申请转正', '办理转正', '提交转正', '试用期转正', '想转正', '要转正', '入职手续', '试用期疑问']
+    },
+    "reimbursement": {
+        "keywords": ['报销', '薪资', '工资', '社保', '公积金', '五险一金', '差旅费', '交通费', '餐费'],
+        "action_phrases": ['申请报销', '提交报销', '报销费用', '咨询薪资', '咨询工资', '查询社保', '查询公积金', '报销差旅', '报销交通']
     }
 }
 
@@ -128,6 +185,14 @@ def parse_ticket_type_choice(question: str):
         return "info_change"
     if any(k in q for k in ("考勤异常", "忘记打卡", "补卡", "漏打卡", "打卡异常", "考勤说明")):
         return "attendance_exception"
+    if any(k in q for k in ("请假", "年假", "病假", "事假", "婚假", "产假", "丧假", "调休", "陪产假")):
+        return "leave_request"
+    if any(k in q for k in ("离职", "辞职", "离岗", "解除劳动合同")):
+        return "resignation"
+    if any(k in q for k in ("转正", "试用期", "入职", "实习转正")):
+        return "onboarding_probation"
+    if any(k in q for k in ("报销", "薪资", "工资", "社保", "公积金", "五险一金", "差旅费")):
+        return "reimbursement"
     if any(k in q for k in ("转人工", "人工处理", "其他", "HR")):
         return "other"
 
@@ -135,7 +200,11 @@ def parse_ticket_type_choice(question: str):
         "1": "certify", "一": "certify", "第一种": "certify",
         "2": "info_change", "二": "info_change", "第二种": "info_change",
         "3": "attendance_exception", "三": "attendance_exception", "第三种": "attendance_exception",
-        "4": "other", "四": "other", "第四种": "other",
+        "4": "leave_request", "四": "leave_request", "第四种": "leave_request",
+        "5": "resignation", "五": "resignation", "第五种": "resignation",
+        "6": "onboarding_probation", "六": "onboarding_probation", "第六种": "onboarding_probation",
+        "7": "reimbursement", "七": "reimbursement", "第七种": "reimbursement",
+        "8": "other", "八": "other", "第八种": "other",
     }
     return choice_map.get(q)
 
@@ -147,8 +216,12 @@ def build_ticket_type_selection_answer() -> str:
         "1. **在职证明 / 工作证明 / 收入证明**\n"
         "2. **个人信息变更**（手机号、邮箱等）\n"
         "3. **考勤异常说明**（忘记打卡、补卡等）\n"
-        "4. **其他 HR 人工请求**\n\n"
-        "请直接说明，例如「我想再开一份在职证明」或「申请信息变更」。"
+        "4. **请假申请**（年假、病假、事假、婚/产假等）\n"
+        "5. **离职申请**\n"
+        "6. **入职/转正**（转正申请、试用期疑问）\n"
+        "7. **报销/薪资**（费用报销、薪资社保咨询）\n"
+        "8. **其他 HR 人工请求**\n\n"
+        "请直接说明，例如「我想请三天病假」或「申请离职」。"
         "回复「取消」可放弃本次申请。"
     )
 

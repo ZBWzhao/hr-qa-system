@@ -9,7 +9,7 @@
         <div>
           <div style="font-size: 18px; font-weight: 600; color: #111827">{{ userStore.userInfo.real_name || '用户' }}</div>
           <div style="font-size: 13px; color: #9CA3AF; margin-top: 4px">
-            工号：{{ userStore.userInfo.employee_id || '—' }} · {{ userStore.userInfo.department_name || '未分配部门' }}
+            工号：{{ userStore.userInfo.username || '—' }} · {{ userStore.userInfo.department_name || '未分配部门' }}
           </div>
         </div>
         <el-button style="margin-left: auto" @click="$router.push('/profile')">编辑资料</el-button>
@@ -161,6 +161,10 @@
             <el-option label="证明开具" value="certify" />
             <el-option label="信息变更" value="info_change" />
             <el-option label="考勤异常" value="attendance_exception" />
+            <el-option label="请假申请" value="leave_request" />
+            <el-option label="离职申请" value="resignation" />
+            <el-option label="入职/转正" value="onboarding_probation" />
+            <el-option label="报销/薪资" value="reimbursement" />
             <el-option label="其他" value="other" />
           </el-select>
         </el-form-item>

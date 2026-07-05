@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api import auth, users, departments, documents, rules, search, chat, chat_history, conversations, feedback, notices, tickets, comments, recommendations, onboarding, reminders, gaps, roi, approvals, bot
+from app.api import auth, users, departments, documents, rules, search, chat, chat_history, conversations, feedback, notices, tickets, comments, recommendations, onboarding, reminders, gaps, roi, approvals, bot, guide, statistics
 
 # 导入所有模型，确保 Base.metadata.create_all() 能创建所有表
 from app.models import conversation_state  # noqa: F401
@@ -123,6 +123,8 @@ app.include_router(recommendations.router, prefix=f"{settings.API_V1_PREFIX}/rec
 app.include_router(onboarding.router, prefix=f"{settings.API_V1_PREFIX}/onboarding", tags=["入职引导"])
 app.include_router(reminders.router, prefix=f"{settings.API_V1_PREFIX}/reminders", tags=["到期提醒"])
 app.include_router(gaps.router, prefix=f"{settings.API_V1_PREFIX}/gaps", tags=["知识缺口"])
+app.include_router(guide.router, prefix=f"{settings.API_V1_PREFIX}/guide", tags=["新手指引"])
+app.include_router(statistics.router, prefix=f"{settings.API_V1_PREFIX}/statistics", tags=["数据看板"])
 app.include_router(roi.router, prefix=f"{settings.API_V1_PREFIX}/roi", tags=["ROI分析"])
 app.include_router(approvals.router, prefix=f"{settings.API_V1_PREFIX}/approvals", tags=["审批Mock"])
 app.include_router(bot.router, prefix=f"{settings.API_V1_PREFIX}/bot", tags=["IM机器人Mock"])

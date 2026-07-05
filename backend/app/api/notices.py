@@ -13,13 +13,37 @@ router = APIRouter()
 
 
 @router.get("")
-def list_notices(page: int = 1, page_size: int = 20, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_notices(
+    page: int = 1,
+    page_size: int = 20,
+    filter_type: str = "all",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     query = db.query(Notice)
     now = datetime.now()
     query = query.filter((Notice.expire_at == None) | (Notice.expire_at > now))
+
+    read_ids = set(
+        r.notice_id
+        for r in db.query(NoticeRead).filter(NoticeRead.user_id == current_user.id).all()
+    )
+
+    if filter_type == "unread":
+        if read_ids:
+            query = query.filter(~Notice.id.in_(read_ids))
+    elif filter_type == "pinned":
+        query = query.filter(Notice.is_pinned == 1)
+    elif filter_type != "all":
+        return error("无效的筛选类型")
+
     total = query.count()
-    items = query.order_by(Notice.is_pinned.desc(), Notice.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
-    read_ids = set(r.notice_id for r in db.query(NoticeRead).filter(NoticeRead.user_id == current_user.id).all())
+    items = (
+        query.order_by(Notice.is_pinned.desc(), Notice.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     result = []
     for n in items:
         d = NoticeOut.model_validate(n).model_dump()

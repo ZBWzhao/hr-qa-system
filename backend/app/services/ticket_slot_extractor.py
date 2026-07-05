@@ -85,6 +85,14 @@ def _extract_ticket_slots_regex(text: str, ticket_type: str) -> Dict[str, Any]:
         return _extract_info_change_slots(text)
     elif ticket_type == "attendance_exception":
         return _extract_attendance_exception_slots(text)
+    elif ticket_type == "leave_request":
+        return _extract_leave_request_slots(text)
+    elif ticket_type == "resignation":
+        return _extract_resignation_slots(text)
+    elif ticket_type == "onboarding_probation":
+        return _extract_onboarding_probation_slots(text)
+    elif ticket_type == "reimbursement":
+        return _extract_reimbursement_slots(text)
     return _extract_other_slots(text)
 
 
@@ -326,7 +334,13 @@ def apply_single_missing_slot_fallback(
 
     label = config.get("slot_labels", {}).get(slot, slot)
     value = q
-    for prefix in (f"{label}：", f"{label}:", f"{label}是", f"{label}为", "异常原因：", "异常原因:", "原因：", "原因:"):
+    for prefix in (
+        f"{label}：", f"{label}:", f"{label}是", f"{label}为",
+        "异常原因：", "异常原因:", "原因：", "原因:",
+        "请假事由：", "请假事由:", "离职原因：", "离职原因:",
+        "期望离职日期：", "期望离职日期:", "工作交接人：", "工作交接人:",
+        "问题说明：", "问题说明:", "补充说明：", "补充说明:",
+    ):
         if value.startswith(prefix):
             value = value[len(prefix):].strip()
             break
@@ -349,6 +363,182 @@ def apply_single_missing_slot_fallback(
         extracted[slot] = value
 
     return extracted
+
+
+def _extract_leave_request_slots(text: str) -> Dict[str, Any]:
+    """提取请假申请槽位"""
+    result = {}
+
+    # leave_type（请假类型）
+    type_keywords = {
+        '年假': ['年假', '带薪假'],
+        '病假': ['病假', '生病', '身体不适'],
+        '事假': ['事假', '私事'],
+        '婚假': ['婚假', '结婚'],
+        '产假': ['产假', '生育'],
+        '陪产假': ['陪产假'],
+        '丧假': ['丧假'],
+        '调休': ['调休', '换休'],
+    }
+    for ltype, keywords in type_keywords.items():
+        if any(kw in text for kw in keywords):
+            result['leave_type'] = ltype
+            break
+
+    # 日期提取
+    date_patterns = [
+        r'(\d{4}[.\-/年]\d{1,2}[.\-/月]\d{1,2}[日号]?)',
+        r'(\d+月\d+[日号])',
+        r'([今昨前明][天日])',
+    ]
+    dates = []
+    for pattern in date_patterns:
+        for match in re.finditer(pattern, text):
+            dates.append(match.group(1))
+    if len(dates) >= 2:
+        result['start_date'] = dates[0]
+        result['end_date'] = dates[1]
+    elif len(dates) == 1:
+        result['start_date'] = dates[0]
+
+    # 天数推算（如"请三天假"、"请3天病假"）
+    days_match = re.search(r'(\d+)\s*[天日]', text)
+    if days_match and 'start_date' in result and 'end_date' not in result:
+        result['end_date'] = f"{days_match.group(1)}天后"
+
+    # reason（请假事由）
+    reason_patterns = [
+        r'(?:事由|原因|因为|由于)[是为]?\s*(.{2,50})',
+        r'(?:需要|要)(?:去|回)?\s*(.{2,30})',
+    ]
+    for pattern in reason_patterns:
+        match = re.search(pattern, text)
+        if match:
+            reason = match.group(1).strip()
+            reason = re.sub(r'[，,。.!！?？]+$', '', reason)
+            if reason:
+                result['reason'] = reason
+                break
+
+    return result
+
+
+def _extract_resignation_slots(text: str) -> Dict[str, Any]:
+    """提取离职申请槽位"""
+    result = {}
+
+    # resign_reason（离职原因）
+    reason_patterns = [
+        r'(?:原因|因为|由于|理由)[是为]?\s*(.{2,50})',
+        r'(?:想|要)(?:去|回)?\s*(.{2,30}(?:发展|创业|深造|照顾|家庭|个人))',
+    ]
+    for pattern in reason_patterns:
+        match = re.search(pattern, text)
+        if match:
+            reason = match.group(1).strip()
+            reason = re.sub(r'[，,。.!！?？]+$', '', reason)
+            if reason:
+                result['resign_reason'] = reason
+                break
+
+    # expected_date（期望离职日期）
+    date_patterns = [
+        r'(\d{4}[.\-/年]\d{1,2}[.\-/月]\d{1,2}[日号]?)',
+        r'(\d+月\d+[日号])',
+        r'(下[周月]底前?)',
+        r'(月底前?)',
+        r'(\d+天后)',
+    ]
+    for pattern in date_patterns:
+        match = re.search(pattern, text)
+        if match:
+            result['expected_date'] = match.group(1)
+            break
+
+    # handover_person（工作交接人）
+    handover_patterns = [
+        r'(?:交接[给给]?|交给|接替)[是为]?\s*([^，,。.、]{2,10})',
+        r'(?:交接人|接手人)[是为:：]?\s*([^，,。.、]{2,10})',
+    ]
+    for pattern in handover_patterns:
+        match = re.search(pattern, text)
+        if match:
+            person = match.group(1).strip()
+            person = re.sub(r'[，,。.!！?？]+$', '', person)
+            if person:
+                result['handover_person'] = person
+                break
+
+    return result
+
+
+def _extract_onboarding_probation_slots(text: str) -> Dict[str, Any]:
+    """提取入职/转正槽位"""
+    result = {}
+
+    # apply_type（申请类型）
+    if any(kw in text for kw in ['转正', '正式员工', '通过试用']):
+        result['apply_type'] = '转正申请'
+    elif any(kw in text for kw in ['试用期', '试用', '实习']):
+        result['apply_type'] = '试用期疑问'
+    elif any(kw in text for kw in ['入职', '报到', '新员工']):
+        result['apply_type'] = '入职咨询'
+
+    # current_status（当前状态说明）
+    status_patterns = [
+        r'(?:目前|当前|现在)[是为]?\s*(.{2,30})',
+        r'(?:入职|到岗)[已经]?\s*(.{2,20})',
+        r'(?:试用期|实习)[已经]?\s*(.{2,20})',
+    ]
+    for pattern in status_patterns:
+        match = re.search(pattern, text)
+        if match:
+            status = match.group(1).strip()
+            status = re.sub(r'[，,。.!！?？]+$', '', status)
+            if status:
+                result['current_status'] = status
+                break
+
+    # description（补充说明）
+    if len(text) > 15 and not result.get('current_status'):
+        result['description'] = text.strip()
+
+    return result
+
+
+def _extract_reimbursement_slots(text: str) -> Dict[str, Any]:
+    """提取报销/薪资槽位"""
+    result = {}
+
+    # issue_type（问题类型）
+    type_keywords = {
+        '报销': ['报销', '差旅', '交通费', '餐费', '发票', '费用'],
+        '薪资': ['薪资', '工资', '薪酬', '奖金', '年终奖', '绩效'],
+        '社保': ['社保', '五险', '养老保险', '医疗保险', '失业保险'],
+        '公积金': ['公积金', '住房公积金'],
+    }
+    for itype, keywords in type_keywords.items():
+        if any(kw in text for kw in keywords):
+            result['issue_type'] = itype
+            break
+
+    # amount_range（金额范围）
+    amount_patterns = [
+        r'(\d+(?:\.\d+)?\s*(?:元|块))',
+        r'(\d+(?:\.\d+)?\s*(?:万|千))',
+        r'(?:金额|费用|大概)[是为]?\s*(\d+(?:\.\d+)?(?:元|块|万|千)?)',
+    ]
+    for pattern in amount_patterns:
+        match = re.search(pattern, text)
+        if match:
+            result['amount_range'] = match.group(1)
+            break
+
+    # description（问题说明）
+    if len(text) > 10:
+        result['description'] = text.strip()
+
+    return result
 
 
 def _extract_other_slots(text: str) -> Dict[str, Any]:

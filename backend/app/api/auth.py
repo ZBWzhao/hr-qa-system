@@ -6,6 +6,7 @@ from app.core.response import success, error
 from app.schemas.user import UserRegister, UserLogin, UserOut, UserUpdate
 from app.services.auth import register_user, authenticate_user, create_user_token
 from app.models.user import User
+from app.models.department import Department
 
 router = APIRouter()
 
@@ -23,13 +24,20 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
     user, err_msg = authenticate_user(db, data.username, data.password)
     if not user:
         return error(err_msg or "用户名或密码错误")
-    token_data = create_user_token(user)
+    token_data = create_user_token(user, db)
     return success(token_data)
 
 
 @router.get("/users/me")
-def get_me(current_user: User = Depends(get_current_user)):
-    return success(UserOut.model_validate(current_user).model_dump())
+def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_data = UserOut.model_validate(current_user).model_dump()
+    # 添加部门名称
+    if current_user.department_id:
+        dept = db.query(Department).filter(Department.id == current_user.department_id).first()
+        user_data['department_name'] = dept.name if dept else None
+    else:
+        user_data['department_name'] = None
+    return success(user_data)
 
 
 @router.put("/users/me")

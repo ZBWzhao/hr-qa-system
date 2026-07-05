@@ -25,3 +25,11 @@ export function generateFeedbackSuggestion(feedbackId, force = false) {
     params: force ? { force: 1 } : {},
   })
 }
+
+export function getFeedbackAnalysis() {
+  return request.get('/feedback/analysis')
+}
+
+export function generateFeedbackAnalysis() {
+  return request.post('/feedback/analysis/generate')
+}

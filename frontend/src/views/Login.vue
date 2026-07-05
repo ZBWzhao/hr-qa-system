@@ -33,6 +33,7 @@
             placeholder="请输入用户名"
             prefix-icon="User"
             class="custom-input"
+            @keyup.enter="handleLogin"
           />
         </el-form-item>
         <el-form-item prop="password">

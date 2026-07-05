@@ -6,6 +6,13 @@
         <el-button v-if="userStore.isHR" type="primary" @click="showDialog()">发布通知</el-button>
       </div>
     </template>
+    <div class="notice-filters">
+      <el-radio-group v-model="filterType" size="small" @change="onFilterChange">
+        <el-radio-button label="all">显示全部</el-radio-button>
+        <el-radio-button label="unread">只显示未读</el-radio-button>
+        <el-radio-button label="pinned">只显示置顶</el-radio-button>
+      </el-radio-group>
+    </div>
     <div v-for="notice in notices" :key="notice.id" class="notice-item" @click="viewNotice(notice)">
       <div style="display: flex; justify-content: space-between; align-items: center">
         <div>
@@ -17,7 +24,7 @@
       </div>
       <div style="color: #6B7280; margin-top: 8px; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ notice.content }}</div>
     </div>
-    <el-empty v-if="!notices.length" description="暂无通知" />
+    <el-empty v-if="!notices.length" :description="emptyDescription" />
     <el-pagination style="margin-top: 16px; justify-content: center" :current-page="page" :page-size="20" :total="total" layout="prev, pager, next" @current-change="p => { page = p; fetchData() }" />
 
     <el-drawer v-model="detailVisible" title="通知详情" size="50%">
@@ -50,7 +57,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getNotices, getNotice, createNotice } from '../api/notices'
 import { useUserStore } from '../stores/user'
@@ -61,17 +68,29 @@ const router = useRouter()
 const notices = ref([])
 const page = ref(1)
 const total = ref(0)
+const filterType = ref('all')
 const detailVisible = ref(false)
 const detail = ref({})
 const dialogVisible = ref(false)
 const form = reactive({ title: '', content: '', notice_type: 'general', is_pinned: 0 })
 
+const emptyDescription = computed(() => {
+  if (filterType.value === 'unread') return '暂无未读通知'
+  if (filterType.value === 'pinned') return '暂无置顶通知'
+  return '暂无通知'
+})
+
 async function fetchData() {
   try {
-    const res = await getNotices({ page: page.value })
+    const res = await getNotices({ page: page.value, filter_type: filterType.value })
     notices.value = res.data?.items || []
     total.value = res.data?.total || 0
   } catch (e) {}
+}
+
+function onFilterChange() {
+  page.value = 1
+  fetchData()
 }
 
 async function viewNotice(notice) {
@@ -79,6 +98,10 @@ async function viewNotice(notice) {
     const res = await getNotice(notice.id)
     detail.value = res.data
     notice.is_read = true
+    if (filterType.value === 'unread') {
+      notices.value = notices.value.filter(n => n.id !== notice.id)
+      total.value = Math.max(0, total.value - 1)
+    }
     detailVisible.value = true
     // 刷新Layout中的未读数
     const layout = router.currentRoute.value.matched[0]?.instances?.default
@@ -102,6 +125,7 @@ onMounted(() => fetchData())
 </script>
 
 <style scoped>
+.notice-filters { margin-bottom: 16px; }
 .notice-item { padding: 16px; border: 1px solid #f3f4f6; border-radius: 12px; margin-bottom: 12px; cursor: pointer; transition: all 0.3s; }
 .notice-item:hover { border-color: #D97706; box-shadow: 0 2px 8px rgba(217, 119, 6, 0.08); }
 </style>
