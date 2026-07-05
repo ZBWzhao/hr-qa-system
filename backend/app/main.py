@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.api import auth, users, departments, documents, rules, search, chat, chat_history, conversations, feedback, notices, tickets, comments, recommendations, onboarding, reminders, gaps, roi, approvals, bot, migrate
+from app.api import auth, users, departments, documents, rules, search, chat, chat_history, conversations, feedback, notices, tickets, comments, recommendations, onboarding, reminders, gaps, roi, approvals, bot
 
 # 导入所有模型，确保 Base.metadata.create_all() 能创建所有表
 from app.models import conversation_state  # noqa: F401
@@ -126,7 +126,6 @@ app.include_router(gaps.router, prefix=f"{settings.API_V1_PREFIX}/gaps", tags=["
 app.include_router(roi.router, prefix=f"{settings.API_V1_PREFIX}/roi", tags=["ROI分析"])
 app.include_router(approvals.router, prefix=f"{settings.API_V1_PREFIX}/approvals", tags=["审批Mock"])
 app.include_router(bot.router, prefix=f"{settings.API_V1_PREFIX}/bot", tags=["IM机器人Mock"])
-app.include_router(migrate.router, prefix=f"{settings.API_V1_PREFIX}/migrate", tags=["临时迁移"])
 
 
 @app.get("/")
