@@ -17,6 +17,7 @@
 - [演示账号](#演示账号)
 - [API 模块](#api-模块)
 - [前端页面与权限](#前端页面与权限)
+- [在线部署](#在线部署)
 - [测试与文档](#测试与文档)
 - [设计要点](#设计要点)
 - [已知限制与后续方向](#已知限制与后续方向)
@@ -244,6 +245,34 @@ npm run dev
 
 - Swagger UI：**http://localhost:8000/docs**
 - 健康检查：**http://localhost:8000/api/v1/health**
+
+---
+
+## 在线部署
+
+本项目已部署到 Railway 云平台，可直接访问：
+
+| 服务 | 地址 | 说明 |
+|------|------|------|
+| **前端** | https://fortunate-youthfulness-production-7cec.up.railway.app | Vue 3 前端应用 |
+| **后端 API** | https://hr-qa-system-production.up.railway.app/api/v1 | FastAPI 后端服务 |
+| **API 文档** | https://hr-qa-system-production.up.railway.app/docs | Swagger UI |
+
+### 部署架构
+
+- **平台**: Railway (https://railway.app)
+- **前端**: 自动从 GitHub `main` 分支部署，Vite 构建
+- **后端**: 自动从 GitHub `main` 分支部署，uvicorn 运行
+- **数据库**: Railway 内置 MySQL 插件
+- **环境变量**: 在 Railway 控制台配置（DATABASE_URL, SECRET_KEY, MIMO_* 等）
+
+### 部署更新
+
+推送到 GitHub `master` 分支后，Railway 会自动触发重新部署：
+
+```bash
+git push github master
+```
 
 ---
 
