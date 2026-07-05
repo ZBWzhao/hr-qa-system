@@ -177,9 +177,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 24px;
   background: #fafafa;
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 /* Background decorations */
@@ -312,7 +314,7 @@ onMounted(() => {
 /* Header */
 .login-header {
   text-align: center;
-  padding: 36px 0 32px;
+  padding: 28px 0 24px;
 }
 
 .logo-icon {
@@ -380,42 +382,61 @@ onMounted(() => {
   transform: translateY(0);
 }
 
-/* Footer */
-.footer-links {
+/* Register link */
+.register-link {
   text-align: center;
-  margin-top: 4px;
-}
-
-.demo-accounts {
-  margin-top: 28px;
-}
-
-.divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: #f3f4f6;
-}
-
-.divider span {
+  margin-top: 16px;
+  font-size: 13px;
   color: #9CA3AF;
+}
+
+.register-link a {
+  color: #D97706;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.register-link a:hover {
+  text-decoration: underline;
+}
+
+/* Right panel */
+.users-panel {
+  flex: 1;
+  min-width: 420px;
+  max-width: 560px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 32px rgba(0, 0, 0, 0.06);
+  border: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.panel-hint {
   font-size: 12px;
-  white-space: nowrap;
+  color: #9CA3AF;
 }
 
 .user-table-wrap {
-  max-height: 240px;
+  flex: 1;
   overflow-y: auto;
-  border-radius: 8px;
-  border: 1px solid #f0f0f0;
+  max-height: 480px;
 }
 
 .user-table {
@@ -509,5 +530,22 @@ onMounted(() => {
   color: #D1D5DB;
   font-size: 11px;
   margin: 10px 0 0;
+}
+
+/* Responsive: stack on narrow screens */
+@media (max-width: 860px) {
+  .login-layout {
+    flex-direction: column;
+    align-items: center;
+  }
+  .login-card {
+    width: min(92vw, 400px);
+    min-width: auto;
+  }
+  .users-panel {
+    width: min(92vw, 500px);
+    min-width: auto;
+    max-width: none;
+  }
 }
 </style>
