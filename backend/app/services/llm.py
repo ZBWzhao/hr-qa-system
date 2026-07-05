@@ -527,6 +527,30 @@ def generate_feedback_handling_suggestion(
     return sanitize_user_facing_text(result.strip(), fallback=result.strip())
 
 
+def looks_like_document_restated(answer: str) -> bool:
+    """判断回答是否仍在按条文/章节复述原文，而非通俗解读"""
+    if not answer or not str(answer).strip():
+        return True
+    t = str(answer).strip()
+    if len(t) < 40:
+        return True
+    article_hits = len(re.findall(r"第[一二三四五六七八九十百\d]+条", t))
+    chapter_hits = len(re.findall(r"第[一二三四五六七八九十百\d]+章", t))
+    if chapter_hits >= 1 and article_hits >= 2:
+        return True
+    if article_hits >= 4:
+        return True
+    lines = [ln.strip() for ln in t.split("\n") if ln.strip()]
+    legal_line_ratio = sum(
+        1 for ln in lines
+        if re.match(r"^第[一二三四五六七八九十百\d]+[章节条]", ln)
+        or re.match(r"^[一二三四五六七八九十]+、", ln)
+    ) / max(len(lines), 1)
+    if legal_line_ratio >= 0.35 and article_hits >= 2:
+        return True
+    return False
+
+
 def generate_interpretation_answer(
     question: str,
     knowledge: str,
@@ -537,29 +561,69 @@ def generate_interpretation_answer(
     if len(knowledge) > 2500:
         knowledge = knowledge[:2500] + "..."
 
-    system_prompt = """你是公司HR助手。请用通俗易懂的大白话解读制度条文，帮助员工理解。
+    system_prompt = """你是公司 HR 助手。用户要的是「大白话解读」，不是把制度原文再念一遍。
 
-要求：
-1. 严格基于提供的制度内容，不编造
-2. 避免官话套话，用「也就是说」「简单来说」等口语化表达
-3. 若提供了员工个人信息，结合其入职日期、试用期等说明「对您意味着什么」
-4. 控制在350字以内
-5. 只输出最终解读，禁止思考过程"""
+【禁止】
+- 禁止按「第一章 / 第二条 / 第X条」逐条抄写或换行复述原文
+- 禁止只把原文列表重新排版
+- 禁止官话套话（如「根据本制度规定」「综上所述」）
 
-    parts = [f"【制度内容】\n{knowledge}"]
+【必须】
+- 用你自己的话概括制度要点，像给同事口头解释一样
+- 使用「简单说」「也就是说」「对你意味着」等口语
+- 按主题归纳（如考核周期、怎么评、等级含义、申诉方式），不要按章节顺序
+- 若提供了员工个人信息，说明这些规定对该员工的具体影响
+- 控制在 400 字以内，可用 Markdown 小标题（不要用「第X章」作标题）
+- 只输出最终解读，禁止思考过程"""
+
     if user_profile:
-        parts.append(f"【员工信息】\n{user_profile}")
-    if history:
-        parts.append(history.strip())
-    parts.append(f"【用户问题】\n{question.strip()}")
-    parts.append("请用通俗语言解读并回答。")
+        output_format = """请按以下结构输出（标题可微调，但不要出现「第X条」）：
+**这份制度讲什么**
+（1-2 句总述）
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "\n\n".join(parts)},
-    ]
-    raw = call_mimo_api(messages, max_tokens=900, temperature=0.35)
-    return sanitize_user_facing_text(raw, fallback="")
+**你需要知道的关键点**
+（3-5 条口语化要点，每条一句话）
+
+**对你意味着什么**
+（结合上述员工信息说明具体影响）"""
+    else:
+        output_format = """请按以下结构输出（标题可微调，但不要出现「第X条」）：
+**这份制度讲什么**
+（1-2 句总述）
+
+**你需要知道的关键点**
+（3-5 条口语化要点，每条一句话）
+
+**实际工作中怎么用**
+（从一般员工视角说明这套制度怎么影响日常）"""
+
+    def _call(extra_user_hint: str = "") -> str:
+        parts = [f"【制度内容（仅供理解，勿复述）】\n{knowledge}"]
+        if user_profile:
+            parts.append(f"【员工信息】\n{user_profile}")
+        if history:
+            parts.append(history.strip())
+        parts.append(f"【用户问题】\n{question.strip()}")
+        parts.append(output_format)
+        if extra_user_hint:
+            parts.append(extra_user_hint)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "\n\n".join(parts)},
+        ]
+        raw = call_mimo_api(messages, max_tokens=900, temperature=0.4)
+        return sanitize_user_facing_text(raw, fallback="")
+
+    result = _call()
+    if result and not is_ai_service_error(result) and not looks_like_document_restated(result):
+        return result
+
+    retry = _call(
+        "上次输出过于接近原文条文。请完全改写：不要出现「第X章/第X条」，只用口语概括要点。"
+    )
+    if retry and not is_ai_service_error(retry) and not looks_like_document_restated(retry):
+        return retry
+    return ""
 
 
 def generate_gap_analysis_summary(questions: list[str]) -> str:

@@ -115,6 +115,11 @@ _FOLLOWUP_TOPIC_NAMES = {
 }
 
 
+_INTERPRET_FALLBACK = (
+    "暂时无法生成通俗解读，请稍后重试；您也可以把关心的具体问题单独提问，例如「绩效等级怎么划分？」。"
+)
+
+
 def _ai_enhance_answer(
     question: str,
     knowledge: str,
@@ -133,14 +138,16 @@ def _ai_enhance_answer(
             user_profile=user_profile,
             history=history,
         )
-    else:
-        ai_answer = generate_knowledge_answer(
-            question=question,
-            knowledge=knowledge,
-            history=history,
-            source_label=source_label,
-            context_hint=context_hint,
-        )
+        if ai_answer and not is_ai_service_error(ai_answer):
+            return ai_answer
+        return fallback or _INTERPRET_FALLBACK
+    ai_answer = generate_knowledge_answer(
+        question=question,
+        knowledge=knowledge,
+        history=history,
+        source_label=source_label,
+        context_hint=context_hint,
+    )
     if ai_answer and not is_ai_service_error(ai_answer):
         return ai_answer
     return fallback or knowledge
@@ -283,8 +290,8 @@ def _try_document_interpretation_answer(
         knowledge=knowledge,
         history=history,
         source_label=f"制度文档《{doc.title}》",
-        context_hint="请严格基于上述文档原文进行通俗解读，不要编造文档中未出现的内容。",
-        fallback=doc.content_text[:1200],
+        context_hint="请基于文档内容用口语概括解读，不要逐条复述原文条文。",
+        fallback="",
         interpret_mode=True,
         user_profile=user_profile,
     )
@@ -2035,7 +2042,7 @@ def _try_dynamic_knowledge_answer(
         history=history,
         source_label="公告与制度文档",
         context_hint=context_hint + "\n请优先依据公告和最新制度文档回答，若与旧规定冲突以最新内容为准。",
-        fallback=knowledge[:800],
+        fallback="" if interpret_mode else knowledge[:800],
         interpret_mode=interpret_mode,
         user_profile=user_profile,
     )
