@@ -25,6 +25,7 @@ class DocumentOut(BaseModel):
     version: str
     status: str
     uploader_id: int
+    department_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 

@@ -24,7 +24,11 @@ def get_onboarding(current_user: User = Depends(get_current_user), db: Session =
     if current_user.hire_date:
         is_new = (datetime.now() - current_user.hire_date).days <= 30
 
-    docs = db.query(Document).filter(Document.status == "published").all()
+    docs_query = db.query(Document).filter(Document.status == "published")
+    # 部门隔离：只显示自己部门的文档
+    if current_user.department_id:
+        docs_query = docs_query.filter(Document.department_id == current_user.department_id)
+    docs = docs_query.all()
     checklist = []
     for doc in docs:
         if doc.title in ONBOARDING_DOCS:

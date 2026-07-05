@@ -32,14 +32,20 @@ def list_tickets(
 ):
     if current_user.role in ("hr", "admin"):
         query = db.query(Ticket)
+        # 部门隔离：HR 只能看自己部门的工单
+        if current_user.role == "hr" and current_user.department_id:
+            query = query.join(User, User.id == Ticket.creator_id).filter(User.department_id == current_user.department_id)
     else:
         query = db.query(Ticket).filter(Ticket.creator_id == current_user.id)
     if status:
         query = query.filter(Ticket.status == status)
     if type:
         query = query.filter(Ticket.type == type)
-    if department_id is not None:
-        query = query.join(User, User.id == Ticket.creator_id).filter(User.department_id == department_id)
+    # Admin 可以通过 department_id 参数筛选
+    if department_id is not None and current_user.role == "admin":
+        if not any(j.target is User for j in query.column_descriptions):
+            query = query.join(User, User.id == Ticket.creator_id)
+        query = query.filter(User.department_id == department_id)
     if keyword and keyword.strip():
         kw = f"%{keyword.strip()}%"
         query = query.filter(or_(Ticket.title.like(kw), Ticket.ticket_no.like(kw), Ticket.description.like(kw)))
@@ -74,12 +80,16 @@ def list_ticket_types(current_user: User = Depends(get_current_user)):
 
 @router.get("/stats")
 def ticket_stats(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
-    total = db.query(Ticket).count()
-    pending = db.query(Ticket).filter(Ticket.status == "pending").count()
-    processing = db.query(Ticket).filter(Ticket.status == "processing").count()
-    completed = db.query(Ticket).filter(Ticket.status == "completed").count()
-    rejected = db.query(Ticket).filter(Ticket.status == "rejected").count()
-    completed_tickets = db.query(Ticket).filter(Ticket.status == "completed", Ticket.resolved_at != None).all()
+    query = db.query(Ticket)
+    # 部门隔离：HR 只能看自己部门的工单统计
+    if current_user.role == "hr" and current_user.department_id:
+        query = query.join(User, User.id == Ticket.creator_id).filter(User.department_id == current_user.department_id)
+    total = query.count()
+    pending = query.filter(Ticket.status == "pending").count()
+    processing = query.filter(Ticket.status == "processing").count()
+    completed = query.filter(Ticket.status == "completed").count()
+    rejected = query.filter(Ticket.status == "rejected").count()
+    completed_tickets = query.filter(Ticket.status == "completed", Ticket.resolved_at != None).all()
     avg_hours = 0
     if completed_tickets:
         total_hours = sum((t.resolved_at - t.created_at).total_seconds() / 3600 for t in completed_tickets)

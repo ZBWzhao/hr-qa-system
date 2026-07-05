@@ -79,7 +79,7 @@
                 <div class="chart-header">
                   <span style="font-weight: 600; color: #111827">工单类型分布</span>
                   <div class="filter-group">
-                    <el-select v-model="selectedDeptForType" placeholder="选择部门" clearable size="small" @change="loadTicketByTypeByDept">
+                    <el-select v-if="userStore.isAdmin" v-model="selectedDeptForType" placeholder="选择部门" clearable size="small" @change="loadTicketByTypeByDept">
                       <el-option label="全部门" :value="null" />
                       <el-option v-for="dept in departments" :key="dept.id" :label="dept.name" :value="dept.id" />
                     </el-select>
@@ -196,7 +196,9 @@ import {
 import { getRoiReport } from '../api/roi'
 import { renderSimpleMarkdown } from '../utils/markdown'
 import { getGuideCategories, batchImportGuideItems } from '../api/guide'
+import { useUserStore } from '../stores/user'
 
+const userStore = useUserStore()
 const activeTab = ref('overview')
 const chartInstances = {}
 const analyses = reactive({})
@@ -312,21 +314,19 @@ async function handleTopQuestionsGuideAnalysis() {
   try {
     const res = await generateTopQuestionsGuideAnalysis()
     analyses.top_questions_guide = res.data?.content || ''
-    // 填充结构化推荐数据
+    // 先加载分类（如尚未加载），再填充推荐
+    if (!guideCategories.value.length) {
+      await loadGuideCategories()
+    }
+    // 填充结构化推荐数据，AI 预选分类
     const recs = res.data?.recommendations || []
-    console.log('[guide_analysis] res.data:', res.data)
-    console.log('[guide_analysis] recommendations:', recs)
     guideRecommendations.value = recs.map(r => ({
       question: r.question || '',
       reason: r.reason || '',
       suggested_answer: r.suggested_answer || '',
-      category_id: null,
+      category_id: matchCategoryId(r.suggested_category),
       enabled: true,
     }))
-    // 加载指引分类（如尚未加载）
-    if (!guideCategories.value.length) {
-      await loadGuideCategories()
-    }
     ElMessage.success('速查指引推荐分析已生成')
   } catch (e) {
     ElMessage.error('生成失败')
@@ -340,9 +340,23 @@ async function loadGuideCategories() {
   try {
     const res = await getGuideCategories()
     guideCategories.value = res.data || []
+    console.log('[guide_categories] loaded:', guideCategories.value.length, 'categories')
   } catch (e) {
-    // 静默失败
+    console.error('[guide_categories] load failed:', e)
   }
+}
+
+// 根据 AI 建议的分类名匹配 category_id
+function matchCategoryId(suggestedName) {
+  if (!suggestedName || !guideCategories.value.length) return null
+  // 精确匹配
+  const exact = guideCategories.value.find(c => c.title === suggestedName)
+  if (exact) return exact.id
+  // 模糊匹配（包含关系）
+  const fuzzy = guideCategories.value.find(c =>
+    c.title.includes(suggestedName) || suggestedName.includes(c.title)
+  )
+  return fuzzy ? fuzzy.id : null
 }
 
 // 全选/取消全选
@@ -565,6 +579,9 @@ onMounted(async () => {
     const res = await getDepartments()
     departments.value = res.data || []
   } catch (e) {}
+
+  // 预加载指引分类（供速查推荐使用）
+  loadGuideCategories()
 
   await initTabCharts()
 })

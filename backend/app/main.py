@@ -22,16 +22,33 @@ def ensure_schema_updates():
 
     try:
         insp = inspect(engine)
-        if "qa_feedback" in insp.get_table_names():
-            cols = {c["name"] for c in insp.get_columns("qa_feedback")}
-            with engine.begin() as conn:
+        with engine.begin() as conn:
+            # 旧版字段补充
+            if "qa_feedback" in insp.get_table_names():
+                cols = {c["name"] for c in insp.get_columns("qa_feedback")}
                 if "ai_suggestion" not in cols:
                     conn.execute(text("ALTER TABLE qa_feedback ADD COLUMN ai_suggestion TEXT NULL"))
                 if "ai_suggestion_at" not in cols:
                     conn.execute(text("ALTER TABLE qa_feedback ADD COLUMN ai_suggestion_at DATETIME NULL"))
-        if "qa_faq" in insp.get_table_names():
-            with engine.begin() as conn:
+            if "qa_faq" in insp.get_table_names():
                 conn.execute(text("DROP TABLE IF EXISTS qa_faq"))
+
+            # 部门隔离：为各表添加 department_id 字段
+            dept_tables = {
+                "hr_document": "department_id",
+                "sys_notice": "department_id",
+                "qa_rule": "department_id",
+                "guide_category": "department_id",
+                "qa_miss": "department_id",
+                "qa_feedback": "department_id",
+            }
+            for table, col in dept_tables.items():
+                if table in insp.get_table_names():
+                    cols = {c["name"] for c in insp.get_columns(table)}
+                    if col not in cols:
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} INTEGER NULL"))
+                        logger.info(f"已为 {table} 添加 {col} 列")
+
     except Exception as e:
         logger.warning("Schema update skipped: %s", e)
 
@@ -70,7 +87,7 @@ def init_rag_system():
 
                 if chunks:
                     chunk_dicts = [{"content": c.content, "keywords": c.keywords or ""} for c in chunks]
-                    add_documents(doc.id, chunk_dicts)
+                    add_documents(doc.id, chunk_dicts, department_id=doc.department_id)
                     logger.info(f"  文档 [{doc.title}] 已索引 {len(chunks)} 个切片")
 
             stats = get_collection_stats()

@@ -11,6 +11,8 @@ export const useUserStore = defineStore('user', () => {
   const role = computed(() => userInfo.value.role || '')
   const isHR = computed(() => role.value === 'hr')
   const isAdmin = computed(() => role.value === 'admin')
+  const departmentId = computed(() => userInfo.value.department_id || null)
+  const departmentName = computed(() => userInfo.value.department_name || '')
 
   function setToken(t) {
     token.value = t
@@ -51,5 +53,5 @@ export const useUserStore = defineStore('user', () => {
     })
   }
 
-  return { token, userInfo, isLoggedIn, role, isHR, isAdmin, setToken, setUser, fetchUserInfo, logout }
+  return { token, userInfo, isLoggedIn, role, isHR, isAdmin, departmentId, departmentName, setToken, setUser, fetchUserInfo, logout }
 })

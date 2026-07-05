@@ -42,7 +42,7 @@ def create_gap(data: dict, current_user: User = Depends(get_current_user), db: S
 
 
 
-    miss = QAMiss(user_id=current_user.id, question=question)
+    miss = QAMiss(user_id=current_user.id, department_id=current_user.department_id, question=question)
 
     db.add(miss)
 
@@ -61,6 +61,9 @@ def create_gap(data: dict, current_user: User = Depends(get_current_user), db: S
 def list_gaps(resolved: int = None, page: int = 1, page_size: int = 20, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
 
     query = db.query(QAMiss)
+    # 部门隔离：HR 只能看自己部门的知识缺口
+    if current_user.role == "hr" and current_user.department_id:
+        query = query.filter(QAMiss.department_id == current_user.department_id)
 
     if resolved is not None:
 
@@ -110,9 +113,13 @@ def list_gaps(resolved: int = None, page: int = 1, page_size: int = 20, current_
 
 def gap_stats(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
 
-    total = db.query(QAMiss).count()
+    query = db.query(QAMiss)
+    # 部门隔离：HR 只能看自己部门的缺口统计
+    if current_user.role == "hr" and current_user.department_id:
+        query = query.filter(QAMiss.department_id == current_user.department_id)
+    total = query.count()
 
-    resolved = db.query(QAMiss).filter(QAMiss.resolved == 1).count()
+    resolved = query.filter(QAMiss.resolved == 1).count()
 
     from sqlalchemy import func
 
@@ -143,10 +150,13 @@ def gap_stats(current_user: User = Depends(require_roles("hr")), db: Session = D
 def get_gap_analysis(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
 
     """获取已缓存的知识缺口 AI 汇总分析（不自动调用 LLM）"""
+    unresolved_query = db.query(QAMiss).filter(QAMiss.resolved == 0)
+    if current_user.role == "hr" and current_user.department_id:
+        unresolved_query = unresolved_query.filter(QAMiss.department_id == current_user.department_id)
+    unresolved_count = unresolved_query.count()
 
-    unresolved_count = db.query(QAMiss).filter(QAMiss.resolved == 0).count()
-
-    cache = db.query(KnowledgeAnalysisCache).filter(KnowledgeAnalysisCache.cache_key == "gap_summary").first()
+    cache_key = "gap_summary" + (f"_dept{current_user.department_id}" if current_user.role == "hr" and current_user.department_id else "")
+    cache = db.query(KnowledgeAnalysisCache).filter(KnowledgeAnalysisCache.cache_key == cache_key).first()
 
     if cache:
 
@@ -185,31 +195,23 @@ def get_gap_analysis(current_user: User = Depends(require_roles("hr")), db: Sess
 def generate_gap_analysis(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
 
     """点击按钮后生成全量缺口 AI 分析并缓存"""
+    unresolved_query = db.query(QAMiss).filter(QAMiss.resolved == 0)
+    if current_user.role == "hr" and current_user.department_id:
+        unresolved_query = unresolved_query.filter(QAMiss.department_id == current_user.department_id)
 
-    unresolved_items = (
-
-        db.query(QAMiss)
-
-        .filter(QAMiss.resolved == 0)
-
-        .order_by(QAMiss.created_at.desc())
-
-        .limit(50)
-
-        .all()
-
-    )
+    unresolved_items = unresolved_query.order_by(QAMiss.created_at.desc()).limit(50).all()
 
     numbered = [{"seq": i + 1, "text": m.question} for i, m in enumerate(unresolved_items)]
 
-    unresolved_count = db.query(QAMiss).filter(QAMiss.resolved == 0).count()
+    unresolved_count = unresolved_query.count()
 
     from app.services.llm import generate_numbered_cluster_analysis
     content = generate_numbered_cluster_analysis(numbered, "知识缺口", "未命中问题")
 
 
 
-    cache = db.query(KnowledgeAnalysisCache).filter(KnowledgeAnalysisCache.cache_key == "gap_summary").first()
+    cache_key = "gap_summary" + (f"_dept{current_user.department_id}" if current_user.role == "hr" and current_user.department_id else "")
+    cache = db.query(KnowledgeAnalysisCache).filter(KnowledgeAnalysisCache.cache_key == cache_key).first()
 
     meta = json.dumps({"unresolved_count": unresolved_count, "question_sample_size": len(unresolved_items)})
 

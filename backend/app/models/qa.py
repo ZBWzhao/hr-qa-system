@@ -29,6 +29,7 @@ class Rule(Base):
     priority = Column(Integer, nullable=False, default=0)
     status = Column(SmallInteger, nullable=False, default=1)
     created_by = Column(Integer, ForeignKey("sys_user.id"), nullable=True)
+    department_id = Column(Integer, ForeignKey("sys_department.id"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
 
@@ -43,6 +44,7 @@ class QAFeedback(Base):
     correction_text = Column(Text, nullable=True)
     status = Column(String(20), nullable=False, default="pending")
     handler_id = Column(Integer, ForeignKey("sys_user.id"), nullable=True)
+    department_id = Column(Integer, ForeignKey("sys_department.id"), nullable=True)
     handle_note = Column(Text, nullable=True)
     ai_suggestion = Column(Text, nullable=True)
     ai_suggestion_at = Column(DateTime, nullable=True)
@@ -55,6 +57,7 @@ class QAMiss(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("sys_user.id"), nullable=True)
+    department_id = Column(Integer, ForeignKey("sys_department.id"), nullable=True)
     question = Column(Text, nullable=False)
     cluster_id = Column(Integer, nullable=True)
     resolved = Column(SmallInteger, nullable=False, default=0)

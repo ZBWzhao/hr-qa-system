@@ -23,6 +23,9 @@ def list_notices(
     query = db.query(Notice)
     now = datetime.now()
     query = query.filter((Notice.expire_at == None) | (Notice.expire_at > now))
+    # 部门隔离：非管理员只能看到自己部门的公告
+    if current_user.role != "admin" and current_user.department_id:
+        query = query.filter(Notice.department_id == current_user.department_id)
 
     read_ids = set(
         r.notice_id
@@ -56,7 +59,10 @@ def list_notices(
 def unread_count(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     read_ids = set(r.notice_id for r in db.query(NoticeRead).filter(NoticeRead.user_id == current_user.id).all())
     now = datetime.now()
-    total = db.query(Notice).filter((Notice.expire_at == None) | (Notice.expire_at > now)).count()
+    query = db.query(Notice).filter((Notice.expire_at == None) | (Notice.expire_at > now))
+    if current_user.role != "admin" and current_user.department_id:
+        query = query.filter(Notice.department_id == current_user.department_id)
+    total = query.count()
     read_count = len(read_ids)
     return success({"unread": total - read_count})
 
@@ -77,7 +83,7 @@ def get_notice(notice_id: int, current_user: User = Depends(get_current_user), d
 
 @router.post("")
 def create_notice(data: NoticeCreate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
-    notice = Notice(title=data.title, content=data.content, notice_type=data.notice_type, is_pinned=data.is_pinned, publisher_id=current_user.id, expire_at=data.expire_at)
+    notice = Notice(title=data.title, content=data.content, notice_type=data.notice_type, is_pinned=data.is_pinned, publisher_id=current_user.id, department_id=current_user.department_id, expire_at=data.expire_at)
     db.add(notice)
     db.commit()
     db.refresh(notice)

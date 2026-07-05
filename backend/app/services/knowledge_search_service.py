@@ -11,15 +11,13 @@ from app.services.rag.vectorstore import search_similar
 from app.services.text_splitter import extract_keywords
 
 
-def search_active_notices(db: Session, question: str, limit: int = 3) -> list[dict]:
-    """按关键词匹配有效公告（置顶优先）"""
+def search_active_notices(db: Session, question: str, limit: int = 3, department_id: int = None) -> list[dict]:
+    """按关键词匹配有效公告（置顶优先），支持部门隔离"""
     now = datetime.now()
-    notices = (
-        db.query(Notice)
-        .filter((Notice.expire_at == None) | (Notice.expire_at > now))
-        .order_by(Notice.is_pinned.desc(), Notice.created_at.desc())
-        .all()
-    )
+    query = db.query(Notice).filter((Notice.expire_at == None) | (Notice.expire_at > now))
+    if department_id:
+        query = query.filter(Notice.department_id == department_id)
+    notices = query.order_by(Notice.is_pinned.desc(), Notice.created_at.desc()).all()
     keywords = extract_keywords(question)
     q = question.strip()
     scored: list[tuple[int, Notice]] = []
@@ -59,9 +57,9 @@ def search_active_notices(db: Session, question: str, limit: int = 3) -> list[di
     return results
 
 
-def search_document_vectors(db: Session, question: str, top_k: int = 5) -> list[dict]:
-    """向量检索已发布文档 chunk，并附加文档元信息"""
-    raw = search_similar(question, top_k=top_k)
+def search_document_vectors(db: Session, question: str, top_k: int = 5, department_id: int = None) -> list[dict]:
+    """向量检索已发布文档 chunk，并附加文档元信息，支持部门隔离"""
+    raw = search_similar(question, top_k=top_k, department_id=department_id)
     enriched = []
     for item in raw:
         meta = item.get("metadata") or {}
@@ -138,9 +136,12 @@ def should_prefer_dynamic_knowledge(
     return False, ""
 
 
-def search_documents_by_keyword(db: Session, question: str, limit: int = 3) -> list[dict]:
-    """标题/正文关键词兜底检索（向量未命中或分数偏低时使用）"""
-    docs = db.query(Document).filter(Document.status == "published").all()
+def search_documents_by_keyword(db: Session, question: str, limit: int = 3, department_id: int = None) -> list[dict]:
+    """标题/正文关键词兜底检索（向量未命中或分数偏低时使用），支持部门隔离"""
+    query = db.query(Document).filter(Document.status == "published")
+    if department_id:
+        query = query.filter(Document.department_id == department_id)
+    docs = query.all()
     keywords = extract_keywords(question)
     q = (question or "").strip()
     scored: list[tuple[int, Document]] = []
@@ -186,13 +187,16 @@ def search_documents_by_keyword(db: Session, question: str, limit: int = 3) -> l
     return results
 
 
-def find_published_document_by_title(db: Session, title_hint: str) -> Optional[Document]:
-    """按标题模糊匹配已发布文档"""
+def find_published_document_by_title(db: Session, title_hint: str, department_id: int = None) -> Optional[Document]:
+    """按标题模糊匹配已发布文档，支持部门隔离"""
     if not title_hint or not title_hint.strip():
         return None
 
     hint = re.sub(r"\s+", "", title_hint.strip())
-    docs = db.query(Document).filter(Document.status == "published").all()
+    query = db.query(Document).filter(Document.status == "published")
+    if department_id:
+        query = query.filter(Document.department_id == department_id)
+    docs = query.all()
     best: Optional[Document] = None
     best_score = 0
 
@@ -211,14 +215,11 @@ def find_published_document_by_title(db: Session, title_hint: str) -> Optional[D
     return best
 
 
-def list_published_document_titles(db: Session, limit: int = 20) -> list[str]:
-    docs = (
-        db.query(Document)
-        .filter(Document.status == "published")
-        .order_by(Document.updated_at.desc())
-        .limit(limit)
-        .all()
-    )
+def list_published_document_titles(db: Session, limit: int = 20, department_id: int = None) -> list[str]:
+    query = db.query(Document).filter(Document.status == "published")
+    if department_id:
+        query = query.filter(Document.department_id == department_id)
+    docs = query.order_by(Document.updated_at.desc()).limit(limit).all()
     return [d.title for d in docs if d.title]
 
 

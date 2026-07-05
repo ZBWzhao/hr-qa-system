@@ -10,66 +10,98 @@
       <div class="dot-grid"></div>
     </div>
 
-    <div class="login-card" :class="{ 'card-visible': cardVisible }">
-      <!-- Top accent bar -->
-      <div class="accent-bar"></div>
+    <div class="login-layout" :class="{ 'card-visible': cardVisible }">
+      <!-- 左侧：登录表单 -->
+      <div class="login-card">
+        <div class="accent-bar"></div>
 
-      <div class="login-header">
-        <div class="logo-icon">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="#D97706"/>
-            <path d="M12 6C8.69 6 6 8.69 6 12C6 15.31 8.69 18 12 18C15.31 18 18 15.31 18 12C18 8.69 15.31 6 12 6ZM12 16C9.79 16 8 14.21 8 12C8 9.79 9.79 8 12 8C14.21 8 16 9.79 16 12C16 14.21 14.21 16 12 16Z" fill="#D97706" opacity="0.6"/>
-            <circle cx="12" cy="12" r="2" fill="#D97706"/>
-          </svg>
+        <div class="login-header">
+          <div class="logo-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="#D97706"/>
+              <path d="M12 6C8.69 6 6 8.69 6 12C6 15.31 8.69 18 12 18C15.31 18 18 15.31 18 12C18 8.69 15.31 6 12 6ZM12 16C9.79 16 8 14.21 8 12C8 9.79 9.79 8 12 8C14.21 8 16 9.79 16 12C16 14.21 14.21 16 12 16Z" fill="#D97706" opacity="0.6"/>
+              <circle cx="12" cy="12" r="2" fill="#D97706"/>
+            </svg>
+          </div>
+          <h1>HR Copilot</h1>
+          <p>智能制度问答系统</p>
         </div>
-        <h1>HR Copilot</h1>
-        <p>智能制度问答系统</p>
+
+        <el-form ref="formRef" :model="form" :rules="rules" label-width="0" size="large">
+          <el-form-item prop="username">
+            <el-input
+              v-model="form.username"
+              placeholder="请输入用户名"
+              prefix-icon="User"
+              class="custom-input"
+              @keyup.enter="handleLogin"
+            />
+          </el-form-item>
+          <el-form-item prop="password">
+            <el-input
+              v-model="form.password"
+              type="password"
+              placeholder="请输入密码"
+              prefix-icon="Lock"
+              show-password
+              @keyup.enter="handleLogin"
+              class="custom-input"
+            />
+          </el-form-item>
+          <el-form-item>
+            <el-button
+              type="primary"
+              :loading="loading"
+              class="login-btn"
+              @click="handleLogin"
+            >
+              <span v-if="!loading">登 录</span>
+              <span v-else>验证中...</span>
+            </el-button>
+          </el-form-item>
+        </el-form>
+
+        <div class="register-link">
+          <span>还没有账号？</span>
+          <router-link to="/register">立即注册</router-link>
+        </div>
       </div>
 
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="0" size="large">
-        <el-form-item prop="username">
-          <el-input
-            v-model="form.username"
-            placeholder="请输入用户名"
-            prefix-icon="User"
-            class="custom-input"
-            @keyup.enter="handleLogin"
-          />
-        </el-form-item>
-        <el-form-item prop="password">
-          <el-input
-            v-model="form.password"
-            type="password"
-            placeholder="请输入密码"
-            prefix-icon="Lock"
-            show-password
-            @keyup.enter="handleLogin"
-            class="custom-input"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button
-            type="primary"
-            :loading="loading"
-            class="login-btn"
-            @click="handleLogin"
-          >
-            <span v-if="!loading">登 录</span>
-            <span v-else>验证中...</span>
-          </el-button>
-        </el-form-item>
-      </el-form>
-
-      <div class="demo-accounts">
-        <div class="divider">
-          <span>演示账号</span>
+      <!-- 右侧：用户列表 -->
+      <div class="users-panel">
+        <div class="panel-header">
+          <span class="panel-title">快速登录</span>
+          <span class="panel-hint">点击行自动填入 · 密码均为 123456</span>
         </div>
-        <div class="account-tags">
-          <span class="account-tag" @click="fillDemo('admin', '123456')">admin</span>
-          <span class="account-tag" @click="fillDemo('hr001', '123456')">hr001</span>
-          <span class="account-tag" @click="fillDemo('emp001', '123456')">emp001</span>
+        <div class="user-table-wrap">
+          <table class="user-table" v-if="demoUsers.length">
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>姓名</th>
+                <th>角色</th>
+                <th>部门</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="u in demoUsers"
+                :key="u.username"
+                class="user-row"
+                :class="{ 'row-admin': u.role === 'admin', 'row-hr': u.role === 'hr' }"
+                @click="fillDemo(u.username, '123456')"
+              >
+                <td class="col-username">{{ u.username }}</td>
+                <td>{{ u.real_name }}</td>
+                <td>
+                  <span class="role-tag" :class="'role-' + u.role">{{ roleLabel(u.role) }}</span>
+                </td>
+                <td>{{ u.department_name }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-else class="demo-hint">加载中...</p>
         </div>
-        <p class="demo-hint">密码均为 123456</p>
       </div>
     </div>
   </div>
@@ -79,7 +111,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { login } from '../api/auth'
+import { login, getDemoAccounts } from '../api/auth'
 import { useUserStore } from '../stores/user'
 import { useChatStore } from '../stores/chat'
 
@@ -89,7 +121,10 @@ const chatStore = useChatStore()
 const formRef = ref()
 const loading = ref(false)
 const cardVisible = ref(false)
+const demoUsers = ref([])
 const form = reactive({ username: '', password: '' })
+
+const roleLabel = (role) => ({ admin: '管理员', hr: 'HR', employee: '员工' }[role] || role)
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
@@ -129,6 +164,10 @@ onMounted(() => {
   setTimeout(() => {
     cardVisible.value = true
   }, 100)
+  // 加载演示账号列表
+  getDemoAccounts().then(res => {
+    demoUsers.value = res.data || []
+  }).catch(() => {})
 })
 </script>
 
@@ -229,14 +268,11 @@ onMounted(() => {
   50% { opacity: 0.15; transform: rotate(-15deg) scaleX(1.2); }
 }
 
-/* Card */
-.login-card {
-  width: min(92vw, 400px);
-  padding: 0 24px 32px;
-  background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 32px rgba(0, 0, 0, 0.06);
-  border: 1px solid #f0f0f0;
+/* Layout */
+.login-layout {
+  display: flex;
+  gap: 20px;
+  align-items: stretch;
   position: relative;
   z-index: 10;
   opacity: 0;
@@ -244,9 +280,20 @@ onMounted(() => {
   transition: all 0.7s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.login-card.card-visible {
+.login-layout.card-visible {
   opacity: 1;
   transform: translateY(0) scale(1);
+}
+
+/* Card */
+.login-card {
+  width: 400px;
+  min-width: 360px;
+  padding: 0 24px 28px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 32px rgba(0, 0, 0, 0.06);
+  border: 1px solid #f0f0f0;
 }
 
 .accent-bar {
@@ -364,29 +411,97 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.account-tags {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-}
-
-.account-tag {
-  padding: 6px 16px;
-  background: #f9fafb;
-  border: 1px solid #f3f4f6;
+.user-table-wrap {
+  max-height: 240px;
+  overflow-y: auto;
   border-radius: 8px;
-  font-size: 13px;
-  color: #6B7280;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  border: 1px solid #f0f0f0;
 }
 
-.account-tag:hover {
+.user-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.user-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.user-table th {
+  background: #f9fafb;
+  color: #6b7280;
+  font-weight: 500;
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 12px;
+}
+
+.user-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #f8f8f8;
+  color: #374151;
+}
+
+.col-username {
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.user-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.user-row:hover {
   background: #FFF7ED;
-  border-color: #D97706;
-  color: #D97706;
-  transform: translateY(-1px);
+}
+
+.user-row:last-child td {
+  border-bottom: none;
+}
+
+.row-admin {
+  background: #fefce8;
+}
+
+.row-admin:hover {
+  background: #fef9c3;
+}
+
+.row-hr {
+  background: #f0f9ff;
+}
+
+.row-hr:hover {
+  background: #e0f2fe;
+}
+
+.role-tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.role-admin {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.role-hr {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.role-employee {
+  background: #f3f4f6;
+  color: #6b7280;
 }
 
 .demo-hint {

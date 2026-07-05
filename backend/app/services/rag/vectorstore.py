@@ -30,12 +30,12 @@ def get_collection():
     return _collection
 
 
-def add_documents(doc_id: int, chunks: list[dict]):
+def add_documents(doc_id: int, chunks: list[dict], department_id: int = None):
     collection = get_collection()
     texts = [c["content"] for c in chunks]
     embeddings = encode_texts(texts)
     ids = [f"doc_{doc_id}_chunk_{i}" for i in range(len(chunks))]
-    metadatas = [{"doc_id": doc_id, "chunk_index": i, "keywords": c.get("keywords", "")} for i, c in enumerate(chunks)]
+    metadatas = [{"doc_id": doc_id, "chunk_index": i, "keywords": c.get("keywords", ""), "department_id": department_id or 0} for i, c in enumerate(chunks)]
 
     collection.upsert(
         ids=ids,
@@ -45,16 +45,20 @@ def add_documents(doc_id: int, chunks: list[dict]):
     )
 
 
-def search_similar(query: str, top_k: int = 5) -> list[dict]:
+def search_similar(query: str, top_k: int = 5, department_id: int = None) -> list[dict]:
     collection = get_collection()
     if collection.count() == 0:
         return []
 
     query_embedding = encode_text(query)
+    where_filter = None
+    if department_id:
+        where_filter = {"department_id": department_id}
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=top_k,
-        include=["documents", "metadatas", "distances"]
+        include=["documents", "metadatas", "distances"],
+        where=where_filter
     )
 
     items = []

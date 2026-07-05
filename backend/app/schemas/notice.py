@@ -26,6 +26,7 @@ class NoticeOut(BaseModel):
     notice_type: str
     is_pinned: int
     publisher_id: int
+    department_id: Optional[int] = None
     expire_at: Optional[datetime] = None
     created_at: datetime
     is_read: Optional[bool] = None

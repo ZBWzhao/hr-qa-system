@@ -39,6 +39,9 @@ def create_feedback(data: FeedbackCreate, current_user: User = Depends(get_curre
 def list_feedback(status: Optional[str] = None, page: int = 1, page_size: int = 20, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role in ("hr", "admin"):
         query = db.query(QAFeedback)
+        # 部门隔离：HR 只能看自己部门的反馈
+        if current_user.role == "hr" and current_user.department_id:
+            query = query.join(QARecord, QARecord.id == QAFeedback.record_id).join(User, User.id == QARecord.user_id).filter(User.department_id == current_user.department_id)
     else:
         query = db.query(QAFeedback).filter(QAFeedback.user_id == current_user.id)
     if status:
@@ -67,8 +70,12 @@ def list_feedback(status: Optional[str] = None, page: int = 1, page_size: int = 
 @router.get("/analysis")
 def get_feedback_analysis(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     """获取已缓存的反馈 AI 汇总分析"""
-    pending_count = db.query(QAFeedback).filter(QAFeedback.status == "pending").count()
-    cache = db.query(KnowledgeAnalysisCache).filter(KnowledgeAnalysisCache.cache_key == "feedback_summary").first()
+    pending_query = db.query(QAFeedback).filter(QAFeedback.status == "pending")
+    if current_user.role == "hr" and current_user.department_id:
+        pending_query = pending_query.join(QARecord, QARecord.id == QAFeedback.record_id).join(User, User.id == QARecord.user_id).filter(User.department_id == current_user.department_id)
+    pending_count = pending_query.count()
+    cache_key = "feedback_summary" + (f"_dept{current_user.department_id}" if current_user.role == "hr" and current_user.department_id else "")
+    cache = db.query(KnowledgeAnalysisCache).filter(KnowledgeAnalysisCache.cache_key == cache_key).first()
     if cache and cache.content:
         meta = json.loads(cache.meta_json or "{}")
         if meta.get("pending_count") == pending_count:
@@ -84,13 +91,10 @@ def get_feedback_analysis(current_user: User = Depends(require_roles("hr")), db:
 @router.post("/analysis/generate")
 def generate_feedback_analysis(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     """生成待处理反馈的带序号聚类 AI 分析"""
-    pending_items = (
-        db.query(QAFeedback)
-        .filter(QAFeedback.status == "pending")
-        .order_by(QAFeedback.created_at.desc())
-        .limit(50)
-        .all()
-    )
+    pending_query = db.query(QAFeedback).filter(QAFeedback.status == "pending")
+    if current_user.role == "hr" and current_user.department_id:
+        pending_query = pending_query.join(QARecord, QARecord.id == QAFeedback.record_id).join(User, User.id == QARecord.user_id).filter(User.department_id == current_user.department_id)
+    pending_items = pending_query.order_by(QAFeedback.created_at.desc()).limit(50).all()
     numbered = []
     for i, f in enumerate(pending_items):
         record = db.query(QARecord).filter(QARecord.id == f.record_id).first()
@@ -102,10 +106,14 @@ def generate_feedback_analysis(current_user: User = Depends(require_roles("hr"))
             extra_parts.append(f"回答类型：{record.answer_type}")
         numbered.append({"seq": i + 1, "text": q, "extra": "；".join(extra_parts)})
 
-    pending_count = db.query(QAFeedback).filter(QAFeedback.status == "pending").count()
+    pending_count_query = db.query(QAFeedback).filter(QAFeedback.status == "pending")
+    if current_user.role == "hr" and current_user.department_id:
+        pending_count_query = pending_count_query.join(QARecord, QARecord.id == QAFeedback.record_id).join(User, User.id == QARecord.user_id).filter(User.department_id == current_user.department_id)
+    pending_count = pending_count_query.count()
     content = generate_feedback_analysis_summary(numbered)
 
-    cache = db.query(KnowledgeAnalysisCache).filter(KnowledgeAnalysisCache.cache_key == "feedback_summary").first()
+    cache_key = "feedback_summary" + (f"_dept{current_user.department_id}" if current_user.role == "hr" and current_user.department_id else "")
+    cache = db.query(KnowledgeAnalysisCache).filter(KnowledgeAnalysisCache.cache_key == cache_key).first()
     meta = json.dumps({"pending_count": pending_count, "sample_size": len(numbered)})
     if cache:
         cache.content = content
@@ -208,6 +216,10 @@ def handle_feedback(feedback_id: int, data: FeedbackHandle, current_user: User =
 
 @router.get("/stats")
 def feedback_stats(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
-    total = db.query(QAFeedback).count()
-    handled = db.query(QAFeedback).filter(QAFeedback.status != "pending").count()
+    query = db.query(QAFeedback)
+    # 部门隔离：HR 只能看自己部门的反馈统计
+    if current_user.role == "hr" and current_user.department_id:
+        query = query.join(QARecord, QARecord.id == QAFeedback.record_id).join(User, User.id == QARecord.user_id).filter(User.department_id == current_user.department_id)
+    total = query.count()
+    handled = query.filter(QAFeedback.status != "pending").count()
     return success({"total": total, "handled": handled, "pending": total - handled, "handle_rate": round(handled / total * 100, 1) if total > 0 else 0})

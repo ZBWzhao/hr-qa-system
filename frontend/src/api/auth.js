@@ -1,5 +1,9 @@
 import request from '../utils/request'
 
+export function getDemoAccounts() {
+  return request.get('/auth/demo-accounts')
+}
+
 export function login(data) {
   return request.post('/auth/login', data)
 }

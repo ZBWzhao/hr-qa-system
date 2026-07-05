@@ -247,21 +247,22 @@ def _try_document_interpretation_answer(
     conv_id: str,
     question: str,
     user: User,
+    department_id: int = None,
 ) -> Optional[dict]:
     if not _is_plain_language_request(question):
         return None
 
     title_hint = _extract_document_title_reference(question)
-    doc = find_published_document_by_title(db, title_hint) if title_hint else None
+    doc = find_published_document_by_title(db, title_hint, department_id=department_id) if title_hint else None
 
     if not doc and title_hint:
-        kw_hits = search_documents_by_keyword(db, title_hint, limit=1)
+        kw_hits = search_documents_by_keyword(db, title_hint, limit=1, department_id=department_id)
         if kw_hits:
             doc = db.query(Document).filter(Document.id == kw_hits[0]["doc_id"]).first()
 
     if not doc:
         if any(k in question for k in ("哪些文档", "什么文档", "有哪些制度", "能解读什么")):
-            titles = list_published_document_titles(db)
+            titles = list_published_document_titles(db, department_id=department_id)
             lines = "\n".join(f"- 《{t}》" for t in titles) if titles else "- （暂无已发布制度文档）"
             answer = (
                 "您可以通过以下方式使用**通俗解读**功能：\n\n"
@@ -322,13 +323,14 @@ def _try_onboarding_prep_answer(
     conv_id: str,
     question: str,
     user: User,
+    department_id: int = None,
 ) -> Optional[dict]:
     if not _is_onboarding_prep_question(question):
         return None
 
-    doc = find_published_document_by_title(db, "员工入职与转正管理办法")
+    doc = find_published_document_by_title(db, "员工入职与转正管理办法", department_id=department_id)
     if not doc:
-        hits = search_documents_by_keyword(db, "入职准备", limit=1)
+        hits = search_documents_by_keyword(db, "入职准备", limit=1, department_id=department_id)
         if hits:
             doc = db.query(Document).filter(Document.id == hits[0]["doc_id"]).first()
     if not doc or not doc.content_text:
@@ -1928,10 +1930,13 @@ def handle_ticket_confirm(question: str, state, user_id: int, db: Session, actio
     )
 
 
-def match_rule(db: Session, question: str):
-    """关键词匹配规则，不调用API"""
+def match_rule(db: Session, question: str, department_id: int = None):
+    """关键词匹配规则，不调用API；支持部门隔离"""
     keywords = extract_keywords(question)
-    rules = db.query(Rule).filter(Rule.status == 1).order_by(Rule.priority.desc()).all()
+    query = db.query(Rule).filter(Rule.status == 1)
+    if department_id is not None:
+        query = query.filter((Rule.department_id == department_id) | (Rule.department_id == None))
+    rules = query.order_by(Rule.priority.desc()).all()
 
     for rule in rules:
         if not rule.trigger_keywords:
@@ -1957,6 +1962,7 @@ def rag_search_and_generate(
     skip_intent_clarification: bool = False,
     context_hint: str = "",
     precomputed_doc_hits: Optional[list] = None,
+    department_id: int = None,
 ) -> tuple:
     """RAG搜索 + AI生成回答"""
 
@@ -1994,7 +2000,7 @@ def rag_search_and_generate(
             for h in precomputed_doc_hits
         ]
     else:
-        search_results = search_similar(question, top_k=5)
+        search_results = search_similar(question, top_k=5, department_id=department_id)
 
     if not search_results or search_results[0]["score"] < 0.3:
         return None, [], "low_confidence"
@@ -2037,14 +2043,15 @@ def _try_dynamic_knowledge_answer(
     context_hint: str = "",
     interpret_mode: bool = False,
     user_profile: str = "",
+    department_id: int = None,
 ) -> Optional[dict]:
     """优先使用公告 / 新发布制度文档回答（高于静态 FAQ/规则）"""
-    notice_hits = search_active_notices(db, resolved_question)
-    doc_hits = search_document_vectors(db, resolved_question)
+    notice_hits = search_active_notices(db, resolved_question, department_id=department_id)
+    doc_hits = search_document_vectors(db, resolved_question, department_id=department_id)
     prefer, reason = should_prefer_dynamic_knowledge(db, resolved_question, notice_hits, doc_hits)
 
     if not prefer:
-        kw_hits = search_documents_by_keyword(db, resolved_question)
+        kw_hits = search_documents_by_keyword(db, resolved_question, department_id=department_id)
         if kw_hits:
             doc_hits = kw_hits
             prefer = True
@@ -2113,6 +2120,9 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
 
     if not question:
         return error("请输入问题")
+
+    # 部门数据隔离：admin 看全部，其他用户只看本部门
+    dept_id = None if current_user.role == "admin" else current_user.department_id
 
     # Step 2: 获取会话状态
     state_service = ConversationStateService(db)
@@ -2230,6 +2240,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
         if choice_result.get("inherited_topic") == "onboarding":
             onboarding_choice_result = _try_onboarding_prep_answer(
                 db, current_user.id, conv_id, resolved_question, current_user,
+                department_id=dept_id,
             )
             if onboarding_choice_result:
                 return _attach_paused_notice(onboarding_choice_result)
@@ -2237,12 +2248,14 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     # 按文档名通俗解读 / 入职准备（角色区分）
     interpret_result = _try_document_interpretation_answer(
         db, current_user.id, conv_id, question, current_user,
+        department_id=dept_id,
     )
     if interpret_result:
         return _attach_paused_notice(interpret_result)
 
     onboarding_result = _try_onboarding_prep_answer(
         db, current_user.id, conv_id, question, current_user,
+        department_id=dept_id,
     )
     if onboarding_result:
         return _attach_paused_notice(onboarding_result)
@@ -2418,18 +2431,19 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     followup_hint = _followup_context_hint(followup_context) if is_followup else ""
     interpret_mode = _is_plain_language_request(question) or _is_personal_rights_request(question)
     user_profile = _build_user_profile_text(current_user) if _is_personal_rights_request(question) else ""
-    doc_vector_hits = search_document_vectors(db, resolved_question)
+    doc_vector_hits = search_document_vectors(db, resolved_question, department_id=dept_id)
     dynamic_result = _try_dynamic_knowledge_answer(
         db, current_user.id, conv_id, question, resolved_question,
         history=context, context_hint=followup_hint,
         interpret_mode=interpret_mode,
         user_profile=user_profile,
+        department_id=dept_id,
     )
     if dynamic_result:
         return _attach_paused_notice(dynamic_result)
 
     # Step 10: 关键词匹配规则
-    rule = match_rule(db, resolved_question)
+    rule = match_rule(db, resolved_question, department_id=dept_id)
 
     # follow-up 问题的主题验证：确保匹配的规则与上下文主题一致
     if rule and is_followup and followup_context.get("inherited_topic"):
@@ -2478,6 +2492,7 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
         skip_intent_clarification=skip_clarification,
         context_hint=intent_context_hint,
         precomputed_doc_hits=doc_vector_hits,
+        department_id=dept_id,
     )
 
     if confidence == "need_clarification":

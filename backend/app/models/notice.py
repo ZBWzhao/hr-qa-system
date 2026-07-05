@@ -12,6 +12,7 @@ class Notice(Base):
     notice_type = Column(String(20), nullable=False, default="general")
     is_pinned = Column(SmallInteger, nullable=False, default=0)
     publisher_id = Column(Integer, ForeignKey("sys_user.id"), nullable=False)
+    department_id = Column(Integer, ForeignKey("sys_department.id"), nullable=True)
     expire_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
 

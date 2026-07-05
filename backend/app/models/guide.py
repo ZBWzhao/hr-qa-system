@@ -11,6 +11,7 @@ class GuideCategory(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(String(100), nullable=False, comment="分类标题")
+    department_id = Column(Integer, ForeignKey("sys_department.id"), nullable=True)
     sort_order = Column(Integer, default=0, comment="排序序号")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)

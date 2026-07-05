@@ -14,6 +14,9 @@ router = APIRouter()
 @router.get("")
 def list_rules(category: Optional[str] = None, page: int = 1, page_size: int = 20, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     query = db.query(Rule)
+    # 部门隔离：非管理员只能看到自己部门的规则
+    if current_user.role != "admin" and current_user.department_id:
+        query = query.filter(Rule.department_id == current_user.department_id)
     if category:
         query = query.filter(Rule.category == category)
     total = query.count()
@@ -31,7 +34,7 @@ def get_rule(rule_id: int, current_user: User = Depends(require_roles("hr")), db
 
 @router.post("")
 def create_rule(data: RuleCreate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
-    rule = Rule(name=data.name, trigger_keywords=data.trigger_keywords, answer_template=data.answer_template, category=data.category, priority=data.priority, created_by=current_user.id)
+    rule = Rule(name=data.name, trigger_keywords=data.trigger_keywords, answer_template=data.answer_template, category=data.category, priority=data.priority, created_by=current_user.id, department_id=current_user.department_id)
     db.add(rule)
     db.commit()
     db.refresh(rule)

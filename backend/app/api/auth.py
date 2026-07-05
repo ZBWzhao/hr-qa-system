@@ -11,6 +11,25 @@ from app.models.department import Department
 router = APIRouter()
 
 
+@router.get("/demo-accounts")
+def get_demo_accounts(db: Session = Depends(get_db)):
+    """获取所有已激活用户列表（供登录页快速填入，无需鉴权）"""
+    users = db.query(User).filter(User.status == 1).all()
+    result = []
+    for u in users:
+        dept_name = None
+        if u.department_id:
+            dept = db.query(Department).filter(Department.id == u.department_id).first()
+            dept_name = dept.name if dept else None
+        result.append({
+            "username": u.username,
+            "real_name": u.real_name,
+            "role": u.role,
+            "department_name": dept_name or "未分配",
+        })
+    return success(result)
+
+
 @router.post("/register")
 def register(data: UserRegister, db: Session = Depends(get_db)):
     user = register_user(db, data.username, data.password, data.real_name, data.email, data.department_id)

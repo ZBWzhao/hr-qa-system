@@ -53,7 +53,11 @@ class BatchItemImport(BaseModel):
 @router.get("")
 def list_guide(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """新手指引目录（不含完整答案，点击条目再查）"""
-    categories = db.query(GuideCategory).order_by(GuideCategory.sort_order).all()
+    query = db.query(GuideCategory)
+    # 部门隔离：非管理员只能看到自己部门的指引
+    if current_user.role != "admin" and current_user.department_id:
+        query = query.filter(GuideCategory.department_id == current_user.department_id)
+    categories = query.order_by(GuideCategory.sort_order).all()
     result = []
     for cat in categories:
         items = db.query(GuideItem).filter(
@@ -64,7 +68,7 @@ def list_guide(current_user: User = Depends(get_current_user), db: Session = Dep
             "title": cat.title,
             "items": [{"id": item.id, "question": item.question} for item in items]
         })
-    total = db.query(GuideItem).count()
+    total = sum(len(r["items"]) for r in result)
     return success({"categories": result, "total": total})
 
 
@@ -89,7 +93,11 @@ def get_guide_item(item_id: int, current_user: User = Depends(get_current_user),
 @router.get("/admin/categories")
 def list_categories(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     """获取所有分类（含完整条目）"""
-    categories = db.query(GuideCategory).order_by(GuideCategory.sort_order).all()
+    query = db.query(GuideCategory)
+    # 部门隔离：非管理员只能看到自己部门的指引
+    if current_user.role != "admin" and current_user.department_id:
+        query = query.filter(GuideCategory.department_id == current_user.department_id)
+    categories = query.order_by(GuideCategory.sort_order).all()
     result = []
     for cat in categories:
         items = db.query(GuideItem).filter(
@@ -112,7 +120,7 @@ def list_categories(current_user: User = Depends(require_roles("hr")), db: Sessi
 @router.post("/admin/categories")
 def create_category(data: CategoryCreate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     """创建分类"""
-    category = GuideCategory(title=data.title, sort_order=data.sort_order)
+    category = GuideCategory(title=data.title, sort_order=data.sort_order, department_id=current_user.department_id)
     db.add(category)
     db.commit()
     db.refresh(category)

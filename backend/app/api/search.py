@@ -19,6 +19,9 @@ def highlight_text(text: str, keyword: str) -> str:
 @router.get("")
 def search_documents(keyword: str, category: Optional[str] = None, page: int = 1, page_size: int = 20, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     chunk_query = db.query(DocumentChunk, Document).join(Document, DocumentChunk.document_id == Document.id).filter(Document.status == "published")
+    # 部门隔离：非管理员只能搜索自己部门的文档
+    if current_user.role != "admin" and current_user.department_id:
+        chunk_query = chunk_query.filter(Document.department_id == current_user.department_id)
     if category:
         chunk_query = chunk_query.filter(Document.category == category)
 

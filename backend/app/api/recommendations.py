@@ -12,13 +12,11 @@ router = APIRouter()
 
 @router.get("")
 def get_recommendations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    hot_docs = (
-        db.query(Document)
-        .filter(Document.status == "published")
-        .order_by(Document.updated_at.desc())
-        .limit(5)
-        .all()
-    )
+    query = db.query(Document).filter(Document.status == "published")
+    # 部门隔离：非管理员只能看到自己部门的推荐文档
+    if current_user.role != "admin" and current_user.department_id:
+        query = query.filter(Document.department_id == current_user.department_id)
+    hot_docs = query.order_by(Document.updated_at.desc()).limit(5).all()
 
     recommendations = []
     for doc in hot_docs:

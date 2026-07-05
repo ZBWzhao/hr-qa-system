@@ -59,6 +59,9 @@ def list_documents(keyword: Optional[str] = None, category: Optional[str] = None
     # 普通员工只能看已发布文档
     if current_user.role not in ("hr", "admin"):
         query = query.filter(Document.status == "published")
+    # 部门隔离：非管理员只能看到自己部门的文档
+    if current_user.role != "admin" and current_user.department_id:
+        query = query.filter(Document.department_id == current_user.department_id)
     if keyword:
         # 同时搜索标题和内容
         query = query.filter(
@@ -271,7 +274,8 @@ def create_document(title: str = Form(...), category: str = Form("other"), conte
         content_text=actual_content,
         version="1.0",
         status="draft",
-        uploader_id=current_user.id
+        uploader_id=current_user.id,
+        department_id=current_user.department_id
     )
     db.add(doc)
     db.commit()
@@ -364,7 +368,7 @@ def _sync_document_chunks(db: Session, doc: Document) -> list:
 
 
 def _index_document_to_vector(db: Session, doc_id: int) -> int:
-    """将已发布文档写入向量库（先删后建）"""
+    """将已发布文档写入向量库（先删后建），携带部门信息"""
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc or doc.status != "published":
         delete_document(doc_id)
@@ -374,7 +378,7 @@ def _index_document_to_vector(db: Session, doc_id: int) -> int:
     if not chunks:
         return 0
     chunk_dicts = [{"content": c.content, "keywords": c.keywords or ""} for c in chunks]
-    add_documents(doc_id, chunk_dicts)
+    add_documents(doc_id, chunk_dicts, department_id=doc.department_id)
     return len(chunks)
 
 

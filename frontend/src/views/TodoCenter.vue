@@ -31,7 +31,7 @@
           <el-select v-model="ticketTypeFilter" placeholder="全部类型" clearable @change="onTicketFilterChange" style="width: 140px">
             <el-option v-for="t in ticketTypes" :key="t.value" :label="t.label" :value="t.value" />
           </el-select>
-          <el-select v-model="ticketDeptFilter" placeholder="全部部门" clearable @change="onTicketFilterChange" style="width: 160px">
+          <el-select v-if="userStore.isAdmin" v-model="ticketDeptFilter" placeholder="全部部门" clearable @change="onTicketFilterChange" style="width: 160px">
             <el-option v-for="d in departments" :key="d.id" :label="d.name" :value="d.id" />
           </el-select>
           <el-button type="primary" @click="onTicketFilterChange">搜索</el-button>
@@ -222,6 +222,7 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useUserStore } from '../stores/user'
 import { getTickets, updateTicket, getTicketStats, getTicketTypes } from '../api/tickets'
 import { ticketTypeLabel, ticketStatusLabel, ticketStatusType } from '../utils/ticketLabels'
 import { getFeedbacks, handleFeedback, getFeedbackSuggestion, generateFeedbackSuggestion, getFeedbackAnalysis, generateFeedbackAnalysis } from '../api/feedback'
@@ -229,6 +230,7 @@ import { getGaps, resolveGap as resolveGapApi, getGapAnalysis, generateGapAnalys
 import { getDepartmentsFlat } from '../api/departments'
 import { renderSimpleMarkdown } from '../utils/markdown'
 
+const userStore = useUserStore()
 const activeTab = ref('tickets')
 
 // 工单相关
@@ -280,7 +282,7 @@ async function fetchTickets() {
     const params = { page: ticketPage.value }
     if (ticketStatusFilter.value) params.status = ticketStatusFilter.value
     if (ticketTypeFilter.value) params.type = ticketTypeFilter.value
-    if (ticketDeptFilter.value) params.department_id = ticketDeptFilter.value
+    if (userStore.isAdmin && ticketDeptFilter.value) params.department_id = ticketDeptFilter.value
     if (ticketKeyword.value?.trim()) params.keyword = ticketKeyword.value.trim()
     const res = await getTickets(params)
     tickets.value = res.data?.items || []
