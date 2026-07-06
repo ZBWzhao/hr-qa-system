@@ -21,19 +21,9 @@ export function getTicketByTypeByDept(departmentId) {
   return request.get(`/statistics/charts/ticket_by_type_by_dept/data${params}`)
 }
 
-export function getTicketByDeptByType(ticketType) {
-  const params = ticketType ? `?ticket_type=${ticketType}` : ''
-  return request.get(`/statistics/charts/ticket_by_dept_by_type/data${params}`)
-}
-
 export function generateTicketByTypeByDeptAnalysis(departmentId) {
   const params = departmentId ? `?department_id=${departmentId}` : ''
   return request.post(`/statistics/charts/ticket_by_type_by_dept/analysis/generate${params}`)
-}
-
-export function generateTicketByDeptByTypeAnalysis(ticketType) {
-  const params = ticketType ? `?ticket_type=${ticketType}` : ''
-  return request.post(`/statistics/charts/ticket_by_dept_by_type/analysis/generate${params}`)
 }
 
 export function generateTopQuestionsGuideAnalysis() {

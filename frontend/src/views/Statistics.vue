@@ -98,35 +98,6 @@
             </el-card>
           </el-col>
 
-          <!-- 工单部门分布（按类型筛选） -->
-          <el-col :xs="24" :sm="24" :md="12" style="margin-bottom: 20px">
-            <el-card>
-              <template #header>
-                <div class="chart-header">
-                  <span style="font-weight: 600; color: #111827">工单部门分布</span>
-                  <div class="filter-group">
-                    <el-select v-model="selectedTypeForDept" placeholder="选择工单类型" clearable size="small" @change="loadTicketByDeptByType">
-                      <el-option label="全部类型" :value="null" />
-                      <el-option label="证明开具" value="certify" />
-                      <el-option label="信息变更" value="info_change" />
-                      <el-option label="考勤异常" value="attendance_exception" />
-                      <el-option label="其他" value="other" />
-                    </el-select>
-                    <el-button size="small" type="primary" plain :loading="analysisLoading.dept_by_type" @click="handleTicketByDeptAnalysis">
-                      {{ analyses.dept_by_type ? '刷新 AI 分析' : 'AI 分析' }}
-                    </el-button>
-                  </div>
-                </div>
-              </template>
-              <div ref="ticketByDeptByTypeChart" style="height: 320px"></div>
-              <el-collapse v-if="analyses.dept_by_type" style="margin-top: 12px">
-                <el-collapse-item title="AI 数据解读与建议" name="1">
-                  <div class="md-content" style="line-height: 1.8" v-html="renderSimpleMarkdown(analyses.dept_by_type)"></div>
-                </el-collapse-item>
-              </el-collapse>
-            </el-card>
-          </el-col>
-
           <!-- 工单状态分布 -->
           <el-col :xs="24" :sm="24" :md="12" style="margin-bottom: 20px">
             <el-card>
@@ -189,8 +160,8 @@ import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import {
   getChartData, getChartAnalysis, generateChartAnalysis,
-  getDepartments, getTicketByTypeByDept, getTicketByDeptByType,
-  generateTicketByTypeByDeptAnalysis, generateTicketByDeptByTypeAnalysis,
+  getDepartments, getTicketByTypeByDept,
+  generateTicketByTypeByDeptAnalysis,
   generateTopQuestionsGuideAnalysis
 } from '../api/statistics'
 import { getRoiReport } from '../api/roi'
@@ -209,7 +180,6 @@ const departments = ref([])
 
 // 筛选状态
 const selectedDeptForType = ref(null)
-const selectedTypeForDept = ref(null)
 
 // ROI数据
 const roiReport = ref({})
@@ -234,7 +204,6 @@ const topQuestionsChart = ref(null)
 
 // 筛选图表引用
 const ticketByTypeByDeptChart = ref(null)
-const ticketByDeptByTypeChart = ref(null)
 const ticketStatusChart = ref(null)
 
 // 渲染问答量趋势
@@ -432,33 +401,6 @@ async function loadTicketByTypeByDept() {
   }
 }
 
-// 加载工单部门分布（按类型筛选）
-async function loadTicketByDeptByType() {
-  await nextTick()
-  const el = ticketByDeptByTypeChart.value
-  if (!el) return
-  if (chartInstances.dept_by_type) {
-    chartInstances.dept_by_type.dispose()
-  }
-  const chart = echarts.init(el)
-  chartInstances.dept_by_type = chart
-
-  try {
-    const res = await getTicketByDeptByType(selectedTypeForDept.value)
-    const data = res.data?.data || []
-    const items = data.slice().sort((a, b) => a.value - b.value)
-    chart.setOption({
-      tooltip: { trigger: 'axis' },
-      grid: { left: 8, right: 24, top: 8, bottom: 8, containLabel: true },
-      xAxis: { type: 'value', minInterval: 1 },
-      yAxis: { type: 'category', data: items.map(i => i.name) },
-      series: [{ type: 'bar', data: items.map(i => i.value), itemStyle: { color: '#3B82F6' }, barMaxWidth: 22 }],
-    })
-  } catch (e) {
-    chart.setOption({ title: { text: '暂无数据', left: 'center', top: 'middle', textStyle: { color: '#9CA3AF', fontSize: 14 } } })
-  }
-}
-
 // 加载工单状态分布
 async function loadTicketStatus() {
   await nextTick()
@@ -498,19 +440,6 @@ async function handleTicketByTypeAnalysis() {
     ElMessage.error('生成失败')
   } finally {
     analysisLoading.type_by_dept = false
-  }
-}
-
-async function handleTicketByDeptAnalysis() {
-  analysisLoading.dept_by_type = true
-  try {
-    const res = await generateTicketByDeptByTypeAnalysis(selectedTypeForDept.value)
-    analyses.dept_by_type = res.data?.content || ''
-    ElMessage.success('AI 分析已生成')
-  } catch (e) {
-    ElMessage.error('生成失败')
-  } finally {
-    analysisLoading.dept_by_type = false
   }
 }
 
@@ -555,7 +484,6 @@ async function initTabCharts() {
     await renderTopQuestions()
   } else if (activeTab.value === 'tickets') {
     await loadTicketByTypeByDept()
-    await loadTicketByDeptByType()
     await loadTicketStatus()
   } else if (activeTab.value === 'roi') {
     await loadRoiData()
