@@ -15,33 +15,37 @@
 
     <el-row :gutter="20">
       <el-col :xs="24" :md="10">
-        <el-card shadow="never">
-          <el-collapse v-model="activeCategories">
-            <el-collapse-item v-for="cat in categories" :key="cat.id" :title="cat.title" :name="cat.id">
-              <div
-                v-for="item in cat.items"
-                :key="item.id"
-                :class="['guide-item', { active: selectedId === item.id }]"
-                @click="selectItem(item.id)"
-              >
-                {{ item.question }}
-              </div>
-            </el-collapse-item>
-          </el-collapse>
-        </el-card>
+        <div class="left-card-wrapper">
+          <el-card shadow="never" class="left-card">
+            <el-collapse v-model="activeCategories">
+              <el-collapse-item v-for="cat in categories" :key="cat.id" :title="cat.title" :name="cat.id">
+                <div
+                  v-for="item in cat.items"
+                  :key="item.id"
+                  :class="['guide-item', { active: selectedId === item.id }]"
+                  @click="selectItem(item.id)"
+                >
+                  {{ item.question }}
+                </div>
+              </el-collapse-item>
+            </el-collapse>
+          </el-card>
+        </div>
       </el-col>
       <el-col :xs="24" :md="14">
-        <el-card shadow="never" class="answer-card">
-          <template v-if="selectedItem">
-            <el-tag size="small" type="warning" style="margin-bottom: 12px">{{ selectedItem.category }}</el-tag>
-            <h3>{{ selectedItem.question }}</h3>
-            <el-divider />
-            <div class="answer-body">{{ selectedItem.answer }}</div>
-            <el-divider />
-            <p class="answer-tip">如需进一步咨询制度细节，可返回智能问答使用「查制度」或「办事项」。</p>
-          </template>
-          <el-empty v-else description="请从左侧选择一个问题" />
-        </el-card>
+        <div class="answer-card-wrapper">
+          <el-card shadow="never" class="answer-card">
+            <template v-if="selectedItem">
+              <el-tag size="small" type="warning" style="margin-bottom: 12px">{{ selectedItem.category }}</el-tag>
+              <h3>{{ selectedItem.question }}</h3>
+              <el-divider />
+              <div class="answer-body">{{ selectedItem.answer }}</div>
+              <el-divider />
+              <p class="answer-tip">如需进一步咨询制度细节，可返回智能问答使用「查制度」或「办事项」。</p>
+            </template>
+            <el-empty v-else description="请从左侧选择一个问题" />
+          </el-card>
+        </div>
       </el-col>
     </el-row>
 
@@ -191,7 +195,14 @@ const saving = ref(false)
 async function loadList() {
   try {
     const res = await getGuideList()
-    categories.value = res.data?.categories || []
+    const list = res.data?.categories || []
+    // 部门专属「新人必做事项」置顶，其余保持原序
+    list.sort((a, b) => {
+      const aTop = a.title.includes('新人必做事项') ? 0 : 1
+      const bTop = b.title.includes('新人必做事项') ? 0 : 1
+      return aTop - bTop
+    })
+    categories.value = list
     activeCategories.value = categories.value.map(c => c.id)
   } catch (e) {}
 }
@@ -356,8 +367,24 @@ onMounted(loadList)
   color: #374151; font-size: 14px; transition: background 0.2s;
 }
 .guide-item:hover { background: #fff7ed; }
+.left-card-wrapper {
+  position: sticky;
+  top: 20px;
+}
+.left-card {
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
 .guide-item.active { background: #ffedd5; color: #92400e; font-weight: 500; }
-.answer-card { min-height: 360px; }
+.answer-card-wrapper {
+  position: sticky;
+  top: 20px;
+}
+.answer-card {
+  min-height: 360px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
 .answer-body { white-space: pre-wrap; line-height: 1.8; color: #374151; }
 .answer-tip { color: #9ca3af; font-size: 13px; margin: 0; }
 
