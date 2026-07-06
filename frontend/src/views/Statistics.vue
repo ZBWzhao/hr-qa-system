@@ -102,19 +102,9 @@
           <el-col :xs="24" :sm="24" :md="12" style="margin-bottom: 20px">
             <el-card>
               <template #header>
-                <div class="chart-header">
-                  <span style="font-weight: 600; color: #111827">工单状态分布</span>
-                  <el-button size="small" type="primary" plain :loading="analysisLoading.ticket_status" @click="handleTicketStatusAnalysis">
-                    {{ analyses.ticket_status ? '刷新 AI 分析' : 'AI 分析' }}
-                  </el-button>
-                </div>
+                <span style="font-weight: 600; color: #111827">工单状态分布</span>
               </template>
               <div ref="ticketStatusChart" style="height: 320px"></div>
-              <el-collapse v-if="analyses.ticket_status" style="margin-top: 12px">
-                <el-collapse-item title="AI 数据解读与建议" name="1">
-                  <div class="md-content" style="line-height: 1.8" v-html="renderSimpleMarkdown(analyses.ticket_status)"></div>
-                </el-collapse-item>
-              </el-collapse>
             </el-card>
           </el-col>
         </el-row>
@@ -159,7 +149,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } 
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import {
-  getChartData, getChartAnalysis, generateChartAnalysis,
+  getChartData,
   getDepartments, getTicketByTypeByDept,
   generateTicketByTypeByDeptAnalysis,
   generateTopQuestionsGuideAnalysis
@@ -440,19 +430,6 @@ async function handleTicketByTypeAnalysis() {
     ElMessage.error('生成失败')
   } finally {
     analysisLoading.type_by_dept = false
-  }
-}
-
-async function handleTicketStatusAnalysis() {
-  analysisLoading.ticket_status = true
-  try {
-    const res = await generateChartAnalysis('ticket_status')
-    analyses.ticket_status = res.data?.content || ''
-    ElMessage.success('AI 分析已生成')
-  } catch (e) {
-    ElMessage.error('生成失败')
-  } finally {
-    analysisLoading.ticket_status = false
   }
 }
 
