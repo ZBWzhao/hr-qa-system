@@ -4,27 +4,29 @@
       <el-tab-pane label="数据总览" name="overview">
         <el-row :gutter="20">
           <!-- 问答量趋势 -->
-          <el-col :xs="24" :sm="24" :md="6" style="margin-bottom: 20px">
+          <el-col :xs="24" :sm="24" :md="12" style="margin-bottom: 20px">
             <el-card>
               <template #header>
                 <span style="font-weight: 600; color: #111827">问答量趋势</span>
               </template>
-              <div ref="qaTrendChart" style="height: 320px"></div>
+              <div ref="qaTrendChart" style="height: 350px"></div>
             </el-card>
           </el-col>
 
           <!-- 咨询类别分布 -->
-          <el-col :xs="24" :sm="24" :md="6" style="margin-bottom: 20px">
+          <el-col :xs="24" :sm="24" :md="12" style="margin-bottom: 20px">
             <el-card>
               <template #header>
                 <span style="font-weight: 600; color: #111827">咨询类别分布</span>
               </template>
-              <div ref="categoryDistChart" style="height: 320px"></div>
+              <div ref="categoryDistChart" style="height: 350px"></div>
             </el-card>
           </el-col>
+        </el-row>
 
-          <!-- 高频问题排行（带AI分析 + 可编辑推荐） -->
-          <el-col :xs="24" :sm="24" :md="12" style="margin-bottom: 20px">
+        <!-- 高频问题排行（带AI分析 + 可编辑推荐） -->
+        <el-row :gutter="20">
+          <el-col :xs="24" :sm="24" :md="24" style="margin-bottom: 20px">
             <el-card>
               <template #header>
                 <div class="chart-header">
@@ -34,7 +36,7 @@
                   </el-button>
                 </div>
               </template>
-              <div ref="topQuestionsChart" style="height: 320px"></div>
+              <div ref="topQuestionsChart" style="height: 350px"></div>
               <!-- AI 分析摘要 -->
               <el-collapse v-if="analyses.top_questions_guide" style="margin-top: 12px">
                 <el-collapse-item title="AI 速查指引推荐分析" name="1">
@@ -89,7 +91,7 @@
                   </div>
                 </div>
               </template>
-              <div ref="ticketByTypeByDeptChart" style="height: 320px"></div>
+              <div ref="ticketByTypeByDeptChart" style="height: 350px"></div>
               <el-collapse v-if="analyses.type_by_dept" style="margin-top: 12px">
                 <el-collapse-item title="AI 数据解读与建议" name="1">
                   <div class="md-content" style="line-height: 1.8" v-html="renderSimpleMarkdown(analyses.type_by_dept)"></div>
@@ -104,7 +106,7 @@
               <template #header>
                 <span style="font-weight: 600; color: #111827">工单状态分布</span>
               </template>
-              <div ref="ticketStatusChart" style="height: 320px"></div>
+              <div ref="ticketStatusChart" style="height: 350px"></div>
             </el-card>
           </el-col>
         </el-row>
@@ -156,6 +158,8 @@ import {
 } from '../api/statistics'
 import { getRoiReport } from '../api/roi'
 import { renderSimpleMarkdown } from '../utils/markdown'
+import { normalizeCategoryChartData } from '../utils/answerTypeLabels'
+import { normalizeTicketTypeChartData } from '../utils/ticketTypeLabels'
 import { getGuideCategories, batchImportGuideItems } from '../api/guide'
 import { useUserStore } from '../stores/user'
 
@@ -228,13 +232,27 @@ async function renderCategoryDist() {
   chartInstances.category_dist = chart
   try {
     const res = await getChartData('category_dist')
-    const data = res.data?.data || []
+    const data = normalizeCategoryChartData(res.data?.data || [])
     chart.setOption({
       tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-      legend: { bottom: 0, type: 'scroll' },
+      legend: {
+        bottom: 0,
+        type: 'scroll',
+        textStyle: { fontSize: 11 },
+        itemWidth: 12,
+        itemHeight: 12,
+      },
       series: [{
-        type: 'pie', radius: ['40%', '70%'],
-        label: { show: true, formatter: '{b}: {c}' },
+        type: 'pie',
+        radius: ['35%', '65%'],
+        center: ['50%', '45%'],
+        label: {
+          show: true,
+          formatter: '{b}\n{d}%',
+          fontSize: 11,
+          lineHeight: 14,
+        },
+        labelLine: { length: 10, length2: 15 },
         data: data.map(d => ({ name: d.name, value: d.value })),
       }],
     })
@@ -376,13 +394,27 @@ async function loadTicketByTypeByDept() {
 
   try {
     const res = await getTicketByTypeByDept(selectedDeptForType.value)
-    const data = res.data?.data || []
+    const data = normalizeTicketTypeChartData(res.data?.data || [])
     chart.setOption({
       tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-      legend: { bottom: 0, type: 'scroll' },
+      legend: {
+        bottom: 0,
+        type: 'scroll',
+        textStyle: { fontSize: 12 },
+        itemWidth: 14,
+        itemHeight: 14,
+      },
       series: [{
-        type: 'pie', radius: ['40%', '70%'],
-        label: { show: true, formatter: '{b}: {c}' },
+        type: 'pie',
+        radius: ['35%', '65%'],
+        center: ['50%', '42%'],
+        label: {
+          show: true,
+          formatter: '{b}\n{d}%',
+          fontSize: 12,
+          lineHeight: 16,
+        },
+        labelLine: { length: 12, length2: 18 },
         data: data.map(d => ({ name: d.name, value: d.value })),
       }],
     })
@@ -407,10 +439,24 @@ async function loadTicketStatus() {
     const data = res.data?.data || []
     chart.setOption({
       tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-      legend: { bottom: 0, type: 'scroll' },
+      legend: {
+        bottom: 0,
+        type: 'scroll',
+        textStyle: { fontSize: 12 },
+        itemWidth: 14,
+        itemHeight: 14,
+      },
       series: [{
-        type: 'pie', radius: ['40%', '70%'],
-        label: { show: true, formatter: '{b}: {c}' },
+        type: 'pie',
+        radius: ['35%', '65%'],
+        center: ['50%', '42%'],
+        label: {
+          show: true,
+          formatter: '{b}\n{d}%',
+          fontSize: 12,
+          lineHeight: 16,
+        },
+        labelLine: { length: 12, length2: 18 },
         data: data.map(d => ({ name: d.name, value: d.value })),
       }],
     })

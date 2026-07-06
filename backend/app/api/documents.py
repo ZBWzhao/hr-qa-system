@@ -54,14 +54,15 @@ def extract_keywords(text: str) -> str:
 @router.get("")
 def list_documents(keyword: Optional[str] = None, category: Optional[str] = None, status: Optional[str] = None, page: int = 1, page_size: int = 20, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     import re
+    from sqlalchemy import or_
 
     query = db.query(Document)
     # 普通员工只能看已发布文档
     if current_user.role not in ("hr", "admin"):
         query = query.filter(Document.status == "published")
-    # 部门隔离：非管理员只能看到自己部门的文档
+    # 部门隔离：非管理员只能看到自己部门的文档或通用文档（department_id 为 None）
     if current_user.role != "admin" and current_user.department_id:
-        query = query.filter(Document.department_id == current_user.department_id)
+        query = query.filter(or_(Document.department_id == current_user.department_id, Document.department_id == None))
     if keyword:
         # 同时搜索标题和内容
         query = query.filter(

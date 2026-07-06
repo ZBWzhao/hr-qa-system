@@ -1,11 +1,14 @@
 import hashlib
 import json
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.constants.answer_type_labels import get_answer_type_label
+from app.constants.ticket_type_labels import get_ticket_type_label, merge_ticket_type_rows, normalize_ticket_type
 from app.core.database import get_db
 from app.core.deps import require_roles
 from app.core.response import success, error
@@ -14,7 +17,7 @@ from app.models.qa import QARecord
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.models.department import Department
-from app.services.llm import generate_chart_data_analysis
+from app.services.llm import generate_chart_data_analysis, generate_ticket_type_distribution_analysis
 
 router = APIRouter()
 
@@ -59,6 +62,81 @@ def _save_cache(db: Session, cache_key: str, content: str, meta: dict):
     return cache
 
 
+def _effective_department_id(current_user: User, department_id: int | None) -> int | None:
+    if current_user.role == "hr" and current_user.department_id:
+        return current_user.department_id
+    return department_id
+
+
+def _department_display_name(db: Session, department_id: int | None) -> str:
+    if not department_id:
+        return "全公司"
+    dept = db.query(Department).filter(Department.id == department_id).first()
+    return dept.name if dept else "未知部门"
+
+
+def _query_ticket_type_distribution(db: Session, department_id: int | None = None) -> list[dict]:
+    query = (
+        db.query(Ticket.type, func.count())
+        .join(User, User.id == Ticket.creator_id)
+    )
+    if department_id:
+        query = query.filter(User.department_id == department_id)
+    rows = query.group_by(Ticket.type).all()
+    return merge_ticket_type_rows(rows)
+
+
+# 占比超过参考阈值时在 AI 上下文中标注风险信号
+_TICKET_TYPE_RISK_THRESHOLDS: dict[str, tuple[float, str]] = {
+    "离职申请": (15.0, "人员流失风险，需关注团队稳定性与离职原因"),
+    "考勤异常": (25.0, "考勤管理压力，可能存在制度宣贯或排班问题"),
+    "请假申请": (35.0, "出勤波动较大，需关注业务节奏与人手配置"),
+    "人工请求": (30.0, "非标诉求集中，流程或制度覆盖可能不足"),
+    "报销/薪资": (30.0, "薪酬报销类咨询集中，可能存在制度理解或发薪流程卡点"),
+}
+
+
+def _build_ticket_type_analysis_context(dept_name: str, data: list[dict]) -> str:
+    total = sum(d.get("value", 0) for d in data)
+    if total <= 0:
+        return ""
+    sorted_data = sorted(data, key=lambda x: x.get("value", 0), reverse=True)
+    lines = []
+    signals = []
+    for d in sorted_data:
+        name = d.get("name", "其他")
+        count = d.get("value", 0)
+        pct = round(count / total * 100, 1)
+        lines.append(f"- {name}：{count} 单（占比 {pct}%）")
+        threshold_info = _TICKET_TYPE_RISK_THRESHOLDS.get(name)
+        if threshold_info and pct >= threshold_info[0]:
+            signals.append(
+                f"- {name} 占比 {pct}%（超过参考阈值 {threshold_info[0]}%）：{threshold_info[1]}"
+            )
+    top = sorted_data[0]
+    top_pct = round(top.get("value", 0) / total * 100, 1)
+    parts = [
+        f"分析范围：{dept_name}",
+        f"工单总量：{total} 单",
+        f"占比最高类型：{top.get('name', '其他')}（{top_pct}%）",
+        "",
+        "【类型分布明细】",
+        *lines,
+    ]
+    if signals:
+        parts.extend(["", "【数据风险信号（规则预判，供分析参考）】", *signals])
+    if len(sorted_data) >= 2:
+        second = sorted_data[1]
+        second_pct = round(second.get("value", 0) / total * 100, 1)
+        gap = round(top_pct - second_pct, 1)
+        parts.extend([
+            "",
+            f"【结构特征】Top1 与 Top2 差距 {gap} 个百分点"
+            + ("，分布高度集中" if gap >= 20 else "，分布相对分散" if gap < 10 else "，存在明显主导类型"),
+        ])
+    return "\n".join(parts)
+
+
 def _fetch_chart_data(db: Session, chart_key: str, department_id: int = None):
     month_ago = datetime.now() - timedelta(days=30)
 
@@ -77,12 +155,10 @@ def _fetch_chart_data(db: Session, chart_key: str, department_id: int = None):
         if department_id:
             query = query.join(User, User.id == QARecord.user_id).filter(User.department_id == department_id)
         rows = query.group_by(QARecord.answer_type).all()
-        label_map = {
-            "faq": "标准答案", "rule": "规则匹配", "rag": "文档检索", "miss": "未命中",
-            "clarification": "澄清追问", "ticket_form": "工单申请", "ticket_qa": "工单咨询",
-            "ticket_submitted": "工单已提交", "notice_form": "公告发布",
-        }
-        return [{"name": label_map.get(t, t or "其他"), "type": t, "value": c} for t, c in rows]
+        merged: dict[str, int] = defaultdict(int)
+        for answer_type, count in rows:
+            merged[get_answer_type_label(answer_type)] += count
+        return [{"name": name, "value": value} for name, value in merged.items()]
 
     if chart_key == "top_questions":
         query = db.query(QARecord.question, func.count())
@@ -100,18 +176,10 @@ def _fetch_chart_data(db: Session, chart_key: str, department_id: int = None):
             "pending": "待处理", "processing": "处理中",
             "completed": "已完成", "rejected": "已驳回",
         }
-        return [{"name": label_map.get(s, s), "status": s, "value": c} for s, c in rows]
+        return [{"name": label_map.get(s, "其他"), "status": s, "value": c} for s, c in rows]
 
     if chart_key == "ticket_by_type":
-        query = db.query(Ticket.type, func.count())
-        if department_id:
-            query = query.join(User, User.id == Ticket.creator_id).filter(User.department_id == department_id)
-        rows = query.group_by(Ticket.type).all()
-        type_map = {
-            "certify": "证明开具", "info_change": "信息变更",
-            "attendance_exception": "考勤异常", "other": "其他",
-        }
-        return [{"name": type_map.get(t, t), "type": t, "value": c} for t, c in rows]
+        return _query_ticket_type_distribution(db, department_id)
 
     if chart_key == "ticket_by_department":
         # 此图表展示各部门工单分布，HR 只看自己部门则只返回一个柱
@@ -178,26 +246,9 @@ def get_departments(current_user: User = Depends(require_roles("hr")), db: Sessi
 @router.get("/charts/ticket_by_type_by_dept/data")
 def get_ticket_by_type_by_dept(department_id: int = None, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
     """按部门筛选工单类型分布"""
-    type_map = {
-        "certify": "证明开具", "info_change": "信息变更",
-        "attendance_exception": "考勤异常", "other": "其他",
-    }
-
-    # 部门隔离：HR 自动过滤自己部门，admin 可选
-    effective_dept = department_id
-    if current_user.role == "hr" and current_user.department_id:
-        effective_dept = current_user.department_id
-
-    query = (
-        db.query(Ticket.type, func.count())
-        .join(User, User.id == Ticket.creator_id)
-    )
-
-    if effective_dept:
-        query = query.filter(User.department_id == effective_dept)
-
-    rows = query.group_by(Ticket.type).all()
-    return success({"chart_key": "ticket_by_type_by_dept", "title": "工单类型分布", "data": [{"name": type_map.get(t, t), "type": t, "value": c} for t, c in rows]})
+    effective_dept = _effective_department_id(current_user, department_id)
+    data = _query_ticket_type_distribution(db, effective_dept)
+    return success({"chart_key": "ticket_by_type_by_dept", "title": "工单类型分布", "data": data})
 
 
 @router.get("/charts/ticket_by_dept_by_type/data")
@@ -242,38 +293,15 @@ def generate_ticket_by_type_by_dept_analysis(
     db: Session = Depends(get_db),
 ):
     """生成按部门筛选的工单类型分析"""
-    type_map = {
-        "certify": "证明开具", "info_change": "信息变更",
-        "attendance_exception": "考勤异常", "other": "其他",
-    }
+    effective_dept = _effective_department_id(current_user, department_id)
+    dept_name = _department_display_name(db, effective_dept)
+    data = _query_ticket_type_distribution(db, effective_dept)
 
-    # 部门隔离：HR 自动过滤自己部门
-    effective_dept = department_id
-    if current_user.role == "hr" and current_user.department_id:
-        effective_dept = current_user.department_id
-
-    query = (
-        db.query(Ticket.type, func.count())
-        .join(User, User.id == Ticket.creator_id)
-    )
-    if effective_dept:
-        dept = db.query(Department).filter(Department.id == effective_dept).first()
-        query = query.filter(User.department_id == effective_dept)
-        dept_name = dept.name if dept else "未知部门"
-    else:
-        dept_name = "全部门"
-
-    rows = query.group_by(Ticket.type).all()
-    data = [{"name": type_map.get(t, t), "type": t, "value": c} for t, c in rows]
-
-    lines = [f"- {d['name']}: {d['value']} 单" for d in data]
-    total = sum(d["value"] for d in data)
-    summary = f"图表：{dept_name} - 工单类型分布\n共 {total} 单\n" + "\n".join(lines)
-
-    content = generate_chart_data_analysis(f"{dept_name}工单类型分布", summary)
-    cache_key = f"stats_ticket_by_type_dept_{department_id or 'all'}"
+    context = _build_ticket_type_analysis_context(dept_name, data)
+    content = generate_ticket_type_distribution_analysis(dept_name, context)
+    cache_key = f"stats_ticket_by_type_dept_{effective_dept or 'all'}"
     fp = _fingerprint(data)
-    _save_cache(db, cache_key, content, {"fingerprint": fp, "department_id": department_id})
+    _save_cache(db, cache_key, content, {"fingerprint": fp, "department_id": effective_dept})
 
     return success({"content": content, "cached": False, "chart_key": "ticket_by_type_by_dept", "title": f"{dept_name}工单类型分布"})
 
@@ -285,19 +313,14 @@ def generate_ticket_by_dept_by_type_analysis(
     db: Session = Depends(get_db),
 ):
     """生成按工单分类筛选的部门分布分析"""
-    type_map = {
-        "certify": "证明开具", "info_change": "信息变更",
-        "attendance_exception": "考勤异常", "other": "其他",
-    }
-
     query = (
         db.query(Department.name, func.count())
         .join(User, User.department_id == Department.id)
         .join(Ticket, Ticket.creator_id == User.id)
     )
     if ticket_type:
-        query = query.filter(Ticket.type == ticket_type)
-        type_name = type_map.get(ticket_type, ticket_type)
+        query = query.filter(Ticket.type == normalize_ticket_type(ticket_type))
+        type_name = get_ticket_type_label(ticket_type)
     else:
         type_name = "全部类型"
     # 部门隔离：HR 只看自己部门

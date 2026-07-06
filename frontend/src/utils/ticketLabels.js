@@ -1,16 +1,7 @@
-export const TICKET_TYPE_LABELS = {
-  certify: '证明开具',
-  info_change: '信息变更',
-  attendance_exception: '考勤异常',
-  leave_request: '请假申请',
-  resignation: '离职申请',
-  onboarding_probation: '入职/转正',
-  reimbursement: '报销/薪资',
-  other: '其他',
-}
+import { labelTicketType } from './ticketTypeLabels'
 
 export function ticketTypeLabel(type) {
-  return TICKET_TYPE_LABELS[type] || type || '—'
+  return labelTicketType(type) || '—'
 }
 
 export function ticketStatusLabel(status) {

@@ -223,15 +223,15 @@ def extract_slot_field_updates(
         return {}
 
     # 优先 AI 理解修改意图
-    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
     ai_slots = extract_ticket_slots_with_ai(q, ticket_type, config, filled)
     if ai_slots:
         return ai_slots
 
-    if ticket_type == "attendance_exception":
+    if ticket_type == "考勤异常":
         return _regex_attendance_field_updates(q)
 
-    if ticket_type != "certify":
+    if ticket_type != "证明开具":
         return {}
 
     result: Dict[str, Any] = {}
@@ -290,7 +290,7 @@ def is_ticket_flow_followup(question: str, ticket_type: str = "") -> bool:
     if any(sig in q for sig in TICKET_FOLLOWUP_SIGNALS):
         return True
 
-    if ticket_type == "certify":
+    if ticket_type == "证明开具":
         certify_hints = [
             "签证", "盖章", "领事馆", "银行", "用途", "接收", "交给",
             "周", "月", "天内", "尽快", "底前", "日前",
@@ -396,7 +396,7 @@ def is_ticket_control_phrase(question: str) -> bool:
 def normalize_ticket_filled(ticket_type: str, filled: dict) -> dict:
     """归一化工单槽位（如考勤异常自动补全补充说明）"""
     result = dict(filled)
-    if ticket_type == "attendance_exception" and result.get("reason"):
+    if ticket_type == "考勤异常" and result.get("reason"):
         result["description"] = result["reason"]
     return result
 
@@ -423,7 +423,7 @@ def ticket_draft_display_fields(config: dict, filled: dict) -> dict:
 
 
 def ticket_exit_to_qa_notice(ticket_type: str) -> str:
-    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
     return (
         f"好的，已暂停「{config['display_type']}」申请。"
         f"如需继续，可回复「继续修改」或「确认提交」。"
@@ -543,7 +543,7 @@ def answer_ticket_followup_question(
         )
 
     if any(kw in q for kw in ["材料", "资料", "文件", "需要什么", "准备", "额外"]):
-        if ticket_type == "certify":
+        if ticket_type == "证明开具":
             return (
                 "在职证明由 HR 根据内部记录直接开具，**一般不需要您额外准备材料**。"
                 "如有特殊要求（如指定格式），可在提交后联系 HR 确认。\n\n"
@@ -565,3 +565,31 @@ def answer_ticket_followup_question(
         f"关于「{display}」的问题，{status_hint}"
         "如有其他 HR 制度问题，也可直接提问。"
     )
+
+
+# 对话上下文中，用户看完流程说明后的简短办理意图
+CONTEXTUAL_TICKET_APPLY_EXACT = frozenset({
+    "申请", "办理", "开始", "提交", "继续", "好的", "可以", "行", "好", "嗯",
+    "开始申请", "开始办理", "现在申请", "现在办理", "去申请", "去办理",
+    "帮我申请", "帮我办理", "我要申请", "我要办理", "确认申请", "继续办理",
+    "ok", "OK", "Ok",
+})
+
+# 短句中含这些词且不含其它工单类型词 → 视为续办当前话题工单
+_OTHER_TICKET_TYPE_WORDS = (
+    "报销", "请假", "离职", "考勤", "转正", "入职", "薪资", "社保", "公积金", "变更",
+)
+
+
+def is_contextual_ticket_apply(question: str) -> bool:
+    """用户是否在看完流程/说明后，用短句表示要开始办理（需结合会话主题）"""
+    q = question.strip()
+    if not q or len(q) > 16:
+        return False
+    if q in CONTEXTUAL_TICKET_APPLY_EXACT:
+        return True
+    if len(q) <= 12 and any(w in q for w in ("申请", "办理", "提交", "开证明", "开具")):
+        if any(w in q for w in _OTHER_TICKET_TYPE_WORDS):
+            return False
+        return True
+    return False

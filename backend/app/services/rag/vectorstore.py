@@ -53,7 +53,8 @@ def search_similar(query: str, top_k: int = 5, department_id: int = None) -> lis
     query_embedding = encode_text(query)
     where_filter = None
     if department_id:
-        where_filter = {"department_id": department_id}
+        # 0 表示全公司通用制度；部门用户也应能检索到
+        where_filter = {"department_id": {"$in": [int(department_id), 0]}}
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=top_k,

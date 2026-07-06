@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     MIMO_API_KEY: str = ""
     MIMO_BASE_URL: str = "https://token-plan-cn.xiaomimimo.com/v1"
     MIMO_MODEL: str = "mimo-v2.5"
+    # 深度分析场景（数据看板 AI 解读等）使用的模型，可在 .env 设为 Pro 版本
+    MIMO_PRO_MODEL: str = ""
 
     # Chroma向量数据库配置
     CHROMA_PERSIST_DIR: str = "./data/chroma_db"

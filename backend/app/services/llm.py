@@ -95,10 +95,15 @@ def sanitize_user_facing_text(text: str, fallback: str = "") -> str:
     return cleaned
 
 
-def call_mimo_api(messages: list, max_tokens: int = 500, temperature: float = 0.3) -> str:
+def call_mimo_api(
+    messages: list,
+    max_tokens: int = 500,
+    temperature: float = 0.3,
+    model: str | None = None,
+) -> str:
     """调用小米MiMo API"""
     req_data = {
-        "model": settings.MIMO_MODEL,
+        "model": model or settings.MIMO_MODEL,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens
@@ -375,7 +380,7 @@ def extract_ticket_slots_with_ai(
             filled_desc = "【当前已填写】\n" + "\n".join(parts)
 
     type_hints = {
-        "attendance_exception": (
+        "考勤异常": (
             "考勤异常说明特别规则：\n"
             "1. 「2026年7月3日, 打卡缺失, 忘记打卡」→ exception_date=2026年7月3日, "
             "exception_type=打卡缺失, reason=忘记打卡\n"
@@ -384,27 +389,27 @@ def extract_ticket_slots_with_ai(
             "3. 用户修改字段时（如「异常原因改成忘记」「异常原因改成: 忘记」），"
             "只返回要改的字段，值中不要包含「改成」「改为」等动词\n"
         ),
-        "certify": "证明开具：need_stamp 用 true/false。",
-        "info_change": "信息变更：准确区分原信息与新信息。",
-        "leave_request": (
+        "证明开具": "证明开具：need_stamp 用 true/false。",
+        "信息变更": "信息变更：准确区分原信息与新信息。",
+        "请假申请": (
             "请假申请特别规则：\n"
             "1. leave_type 使用标准值：年假/病假/事假/婚假/产假/陪产假/丧假/调休\n"
             "2. 日期尽量完整，如「7月10日」→「7月10日」\n"
             "3. reason 是请假事由，简短即可\n"
         ),
-        "resignation": (
+        "离职申请": (
             "离职申请特别规则：\n"
             "1. resign_reason 是离职原因，如个人发展、家庭原因等\n"
             "2. expected_date 是期望离职日期\n"
             "3. handover_person 是工作交接人姓名，与离职原因分开\n"
         ),
-        "onboarding_probation": (
+        "入职转正": (
             "入职/转正特别规则：\n"
             "1. apply_type 使用标准值：转正申请/试用期疑问/入职咨询\n"
             "2. current_status 是当前状态说明，如「试用期3个月，已满2个月」\n"
             "3. description 是补充说明\n"
         ),
-        "reimbursement": (
+        "报销薪资": (
             "报销/薪资特别规则：\n"
             "1. issue_type 使用标准值：报销/薪资/社保/公积金\n"
             "2. amount_range 是金额范围，如「2000元」「5000元左右」\n"
@@ -851,6 +856,75 @@ def generate_chart_data_analysis(chart_title: str, data_summary: str) -> str:
     if cleaned:
         return cleaned
     return "建议：持续跟踪该指标变化，结合制度文档与公告更新优化员工体验。"
+
+
+def _mimo_pro_model() -> str:
+    pro = (settings.MIMO_PRO_MODEL or "").strip()
+    return pro or settings.MIMO_MODEL
+
+
+def generate_ticket_type_distribution_analysis(dept_name: str, data_context: str) -> str:
+    """对部门工单类型分布做深度 HR 分析与行动建议（使用 Pro 模型、更长输出）"""
+    if not data_context or not data_context.strip():
+        return "当前暂无足够工单数据，无法生成分析结论。建议积累一定样本量后再分析。"
+
+    prompt = f"""你是资深 HRBP 与组织发展顾问，擅长从工单数据中发现人员管理风险并给出可落地行动方案。
+
+【分析对象】{dept_name} 的工单类型分布
+
+【数据明细】
+{data_context}
+
+请严格按以下 Markdown 结构输出（总篇幅 800–1200 字，必须结合上方具体数字，禁止空泛套话）：
+
+## 1. 数据概览与结构特征
+- 用数字说明：工单总量、Top3 类型及各自占比
+- 判断分布是「高度集中」还是「相对分散」，指出是否存在单一类型异常突出
+- 若某类型占比明显偏高，必须点名并量化（例如「离职申请占 XX%，显著高于常见参考线」）
+
+## 2. 深层业务解读
+针对占比最高或风险信号最强的 2–3 个类型，从团队管理、制度执行、流程摩擦、季节性/业务节奏等角度分析**可能成因**。
+要求有 HR 专业判断，不要只复述「某类工单较多」。
+
+## 3. 分级行动建议
+按三档输出，每档至少 2 条**可立即执行**的具体建议（写清「谁来做、做什么、为什么」）：
+- **立即行动（本周）**
+- **中期跟进（本月）**
+- **机制优化（本季度）**
+
+**必须根据上方数据中的实际 dominant 类型定制**，参考逻辑（须替换为当前数据，不可照搬）：
+- 离职申请占比高 → HR 主动约部门负责人沟通、做离职原因初筛、关注关键岗位与骨干流失、评估团队氛围
+- 考勤异常占比高 → 排查排班/打卡宣贯、确认是否存在集中出差或弹性办公未备案、与部门核对异常是否重复发生
+- 请假申请占比高 → 关注业务高峰期人手、是否存在长期加班后集中调休、与部门核对排班合理性
+- 证明开具占比高 → 推动自助化/模板化、减少重复人工开具、优化响应 SLA
+- 报销/薪资占比高 → 检查制度是否清晰、是否存在发薪日前集中咨询、加强 FAQ 与指引
+- 信息变更占比高 → 检查系统自助入口是否易用、是否需批量更新后集中提交
+
+禁止输出「持续跟踪」「关注变化趋势」等无信息量套话；禁止输出思考过程。"""
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是 HR Copilot 数据分析顾问，输出面向 HR 负责人的专业报告。"
+                "分析须严谨、建议须可落地，避免模板化废话。"
+            ),
+        },
+        {"role": "user", "content": prompt},
+    ]
+    raw = call_mimo_api(
+        messages,
+        max_tokens=3200,
+        temperature=0.35,
+        model=_mimo_pro_model(),
+    )
+    cleaned = sanitize_user_facing_text(raw, fallback="")
+    if cleaned:
+        return cleaned
+    return (
+        f"建议：{dept_name} 工单类型分布存在结构性特征，"
+        "请 HR 结合占比最高的类型与部门负责人沟通，制定针对性改进计划。"
+    )
 
 
 def correct_user_question_typos(text: str) -> str:

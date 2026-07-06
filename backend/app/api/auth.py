@@ -11,7 +11,7 @@ from app.models.department import Department
 router = APIRouter()
 
 
-@router.get("/demo-accounts")
+@router.get("/demo-accounts", summary="获取演示账号列表")
 def get_demo_accounts(db: Session = Depends(get_db)):
     """获取所有已激活用户列表（供登录页快速填入，无需鉴权）"""
     users = db.query(User).filter(User.status == 1).all()

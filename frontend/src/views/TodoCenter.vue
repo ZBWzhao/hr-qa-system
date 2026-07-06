@@ -40,7 +40,7 @@
           <el-table-column prop="ticket_no" label="工单号" width="130" />
           <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
           <el-table-column prop="type" label="类型" width="100">
-            <template #default="{ row }"><el-tag size="small">{{ ticketTypeLabel(row.type) }}</el-tag></template>
+            <template #default="{ row }"><el-tag size="small">{{ row.type_label || ticketTypeLabel(row.type) }}</el-tag></template>
           </el-table-column>
           <el-table-column prop="department_name" label="部门" width="100" show-overflow-tooltip />
           <el-table-column prop="creator_name" label="提交人" width="90" />

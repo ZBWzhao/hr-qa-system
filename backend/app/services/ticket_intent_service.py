@@ -4,10 +4,12 @@
 """
 from typing import Dict, Any
 
+from app.services.policy_intent_service import is_policy_consultation, is_ticket_submission_request
+
 
 # 工单槽位配置
 TICKET_SLOT_CONFIG = {
-    "certify": {
+    "证明开具": {
         "title": "在职证明开具申请",
         "display_type": "证明开具",
         "required_slots": ["purpose", "receiver", "need_stamp", "expected_time"],
@@ -18,7 +20,7 @@ TICKET_SLOT_CONFIG = {
             "expected_time": "期望完成时间"
         }
     },
-    "info_change": {
+    "信息变更": {
         "title": "个人信息变更申请",
         "display_type": "信息变更",
         "required_slots": ["change_item", "old_value", "new_value", "reason"],
@@ -29,7 +31,7 @@ TICKET_SLOT_CONFIG = {
             "reason": "变更原因"
         }
     },
-    "attendance_exception": {
+    "考勤异常": {
         "title": "考勤异常说明",
         "display_type": "考勤异常",
         "required_slots": ["exception_date", "exception_type", "reason"],
@@ -40,7 +42,7 @@ TICKET_SLOT_CONFIG = {
             "description": "补充说明"
         }
     },
-    "other": {
+    "其他": {
         "title": "HR人工处理请求",
         "display_type": "人工请求",
         "required_slots": ["issue_type", "description", "expected_time"],
@@ -50,7 +52,7 @@ TICKET_SLOT_CONFIG = {
             "expected_time": "期望处理时间"
         }
     },
-    "leave_request": {
+    "请假申请": {
         "title": "请假申请",
         "display_type": "请假申请",
         "required_slots": ["leave_type", "start_date", "end_date", "reason"],
@@ -61,7 +63,7 @@ TICKET_SLOT_CONFIG = {
             "reason": "请假事由"
         }
     },
-    "resignation": {
+    "离职申请": {
         "title": "离职申请",
         "display_type": "离职申请",
         "required_slots": ["resign_reason", "expected_date", "handover_person"],
@@ -71,7 +73,7 @@ TICKET_SLOT_CONFIG = {
             "handover_person": "工作交接人"
         }
     },
-    "onboarding_probation": {
+    "入职转正": {
         "title": "转正申请",
         "display_type": "入职/转正",
         "required_slots": ["apply_type", "current_status", "description"],
@@ -81,7 +83,7 @@ TICKET_SLOT_CONFIG = {
             "description": "补充说明"
         }
     },
-    "reimbursement": {
+    "报销薪资": {
         "title": "报销与薪资咨询",
         "display_type": "报销/薪资",
         "required_slots": ["issue_type", "amount_range", "description"],
@@ -112,31 +114,31 @@ GENERIC_NEW_TICKET_PHRASES = [
 
 # 工单类型关键词映射
 TICKET_TYPE_KEYWORDS = {
-    "certify": {
+    "证明开具": {
         "keywords": ['在职证明', '工作证明', '收入证明', '证明', '开具证明', '开证明', '证明材料'],
         "action_phrases": ['开证明', '开具证明', '申请证明', '办证明', '办理证明', '开在职证明', '开工作证明', '开收入证明']
     },
-    "info_change": {
+    "信息变更": {
         "keywords": ['变更', '修改', '手机号', '电话', '邮箱', '联系方式', '个人信息', '联系电话', '改手机号', '改邮箱'],
         "action_phrases": ['变更联系方式', '修改手机号', '修改邮箱', '信息变更', '改手机号', '改邮箱', '变更个人信息']
     },
-    "attendance_exception": {
+    "考勤异常": {
         "keywords": ['考勤异常', '忘记打卡', '补卡', '打卡异常', '漏打卡', '考勤说明'],
         "action_phrases": ['提交考勤异常', '提交忘记打卡', '申请补卡', '提交打卡异常', '提交考勤说明', '提交忘记打卡说明']
     },
-    "leave_request": {
+    "请假申请": {
         "keywords": ['请假', '年假', '病假', '事假', '婚假', '产假', '丧假', '调休', '陪产假', '哺乳假'],
         "action_phrases": ['请假', '申请请假', '请年假', '请病假', '请事假', '申请年假', '申请病假', '申请事假', '申请婚假', '申请产假', '申请调休', '想请假', '要请假']
     },
-    "resignation": {
+    "离职申请": {
         "keywords": ['离职', '辞职', '离岗', '辞退', '解除劳动合同'],
         "action_phrases": ['申请离职', '办理离职', '提交离职', '想离职', '要离职', '要辞职', '申请辞职', '办理辞职', '离职手续']
     },
-    "onboarding_probation": {
+    "入职转正": {
         "keywords": ['转正', '试用期', '入职', '实习转正', '试用期考核'],
         "action_phrases": ['申请转正', '办理转正', '提交转正', '试用期转正', '想转正', '要转正', '入职手续', '试用期疑问']
     },
-    "reimbursement": {
+    "报销薪资": {
         "keywords": ['报销', '薪资', '工资', '社保', '公积金', '五险一金', '差旅费', '交通费', '餐费'],
         "action_phrases": ['申请报销', '提交报销', '报销费用', '咨询薪资', '咨询工资', '查询社保', '查询公积金', '报销差旅', '报销交通']
     }
@@ -180,31 +182,31 @@ def parse_ticket_type_choice(question: str):
         return intent["ticket_type"]
 
     if any(k in q for k in ("在职证明", "工作证明", "收入证明", "开证明", "证明开具", "证明材料")):
-        return "certify"
+        return "证明开具"
     if any(k in q for k in ("变更", "手机号", "邮箱", "联系方式", "个人信息", "改手机", "改邮箱")):
-        return "info_change"
+        return "信息变更"
     if any(k in q for k in ("考勤异常", "忘记打卡", "补卡", "漏打卡", "打卡异常", "考勤说明")):
-        return "attendance_exception"
+        return "考勤异常"
     if any(k in q for k in ("请假", "年假", "病假", "事假", "婚假", "产假", "丧假", "调休", "陪产假")):
-        return "leave_request"
+        return "请假申请"
     if any(k in q for k in ("离职", "辞职", "离岗", "解除劳动合同")):
-        return "resignation"
+        return "离职申请"
     if any(k in q for k in ("转正", "试用期", "入职", "实习转正")):
-        return "onboarding_probation"
+        return "入职转正"
     if any(k in q for k in ("报销", "薪资", "工资", "社保", "公积金", "五险一金", "差旅费")):
-        return "reimbursement"
+        return "报销薪资"
     if any(k in q for k in ("转人工", "人工处理", "其他", "HR")):
-        return "other"
+        return "其他"
 
     choice_map = {
-        "1": "certify", "一": "certify", "第一种": "certify",
-        "2": "info_change", "二": "info_change", "第二种": "info_change",
-        "3": "attendance_exception", "三": "attendance_exception", "第三种": "attendance_exception",
-        "4": "leave_request", "四": "leave_request", "第四种": "leave_request",
-        "5": "resignation", "五": "resignation", "第五种": "resignation",
-        "6": "onboarding_probation", "六": "onboarding_probation", "第六种": "onboarding_probation",
-        "7": "reimbursement", "七": "reimbursement", "第七种": "reimbursement",
-        "8": "other", "八": "other", "第八种": "other",
+        "1": "证明开具", "一": "证明开具", "第一种": "证明开具",
+        "2": "信息变更", "二": "信息变更", "第二种": "信息变更",
+        "3": "考勤异常", "三": "考勤异常", "第三种": "考勤异常",
+        "4": "请假申请", "四": "请假申请", "第四种": "请假申请",
+        "5": "离职申请", "五": "离职申请", "第五种": "离职申请",
+        "6": "入职转正", "六": "入职转正", "第六种": "入职转正",
+        "7": "报销薪资", "七": "报销薪资", "第七种": "报销薪资",
+        "8": "其他", "八": "其他", "第八种": "其他",
     }
     return choice_map.get(q)
 
@@ -243,16 +245,24 @@ def detect_ticket_intent(question: str) -> Dict[str, Any]:
     """
     q = question.strip()
 
-    # 检查是否包含办理动词
-    has_action_verb = any(verb in q for verb in ACTION_VERBS)
-
-    # 如果没有办理动词，不认为是工单意图
-    if not has_action_verb:
+    if is_policy_consultation(q):
         return {
             "is_ticket_intent": False,
             "ticket_type": None,
             "confidence": 0.0,
-            "reason": "无办理动词"
+            "reason": "制度/流程咨询，非工单办理",
+            "needs_type_selection": False,
+        }
+
+    # 检查是否包含办理动词
+    has_action_verb = any(verb in q for verb in ACTION_VERBS)
+
+    if not has_action_verb and not is_ticket_submission_request(q):
+        return {
+            "is_ticket_intent": False,
+            "ticket_type": None,
+            "confidence": 0.0,
+            "reason": "无办理动词",
         }
 
     # 检查每种工单类型
@@ -280,10 +290,23 @@ def detect_ticket_intent(question: str) -> Dict[str, Any]:
 
     # 特殊处理：转人工
     if '转人工' in q or '人工处理' in q:
-        best_match = 'other'
+        best_match = '其他'
         best_confidence = 0.9
 
     if best_match and best_confidence >= 0.3:
+        has_action_phrase = any(
+            phrase in q
+            for cfg in TICKET_TYPE_KEYWORDS.values()
+            for phrase in cfg["action_phrases"]
+        )
+        if best_confidence < 0.8 and not is_ticket_submission_request(q) and not has_action_phrase:
+            return {
+                "is_ticket_intent": False,
+                "ticket_type": None,
+                "confidence": 0.0,
+                "reason": "有关键词但未表达办理/提交意图",
+                "needs_type_selection": False,
+            }
         return {
             "is_ticket_intent": True,
             "ticket_type": best_match,

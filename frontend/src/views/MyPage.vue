@@ -91,7 +91,7 @@
             <el-table-column prop="ticket_no" label="编号" width="140" />
             <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
             <el-table-column prop="type" label="类型" width="100">
-              <template #default="{ row }"><el-tag size="small">{{ ticketTypeLabel(row.type) }}</el-tag></template>
+              <template #default="{ row }"><el-tag size="small">{{ row.type_label || ticketTypeLabel(row.type) }}</el-tag></template>
             </el-table-column>
             <el-table-column prop="status" label="状态" width="90">
               <template #default="{ row }"><el-tag :type="ticketStatusType(row.status)" size="small">{{ ticketStatusLabel(row.status) }}</el-tag></template>
@@ -135,7 +135,7 @@
         <el-descriptions-item label="工单编号">{{ ticketDetail.ticket_no }}</el-descriptions-item>
         <el-descriptions-item label="标题">{{ ticketDetail.title }}</el-descriptions-item>
         <el-descriptions-item label="类型">
-          <el-tag size="small">{{ ticketTypeLabel(ticketDetail.type) }}</el-tag>
+          <el-tag size="small">{{ ticketDetail.type_label || ticketTypeLabel(ticketDetail.type) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="ticketStatusType(ticketDetail.status)" size="small">{{ ticketStatusLabel(ticketDetail.status) }}</el-tag>
@@ -158,14 +158,14 @@
       <el-form :model="createForm" label-width="80px">
         <el-form-item label="类型">
           <el-select v-model="createForm.type">
-            <el-option label="证明开具" value="certify" />
-            <el-option label="信息变更" value="info_change" />
-            <el-option label="考勤异常" value="attendance_exception" />
-            <el-option label="请假申请" value="leave_request" />
-            <el-option label="离职申请" value="resignation" />
-            <el-option label="入职/转正" value="onboarding_probation" />
-            <el-option label="报销/薪资" value="reimbursement" />
-            <el-option label="其他" value="other" />
+            <el-option label="证明开具" value="证明开具" />
+            <el-option label="信息变更" value="信息变更" />
+            <el-option label="考勤异常" value="考勤异常" />
+            <el-option label="请假申请" value="请假申请" />
+            <el-option label="离职申请" value="离职申请" />
+            <el-option label="入职/转正" value="入职转正" />
+            <el-option label="报销/薪资" value="报销薪资" />
+            <el-option label="其他" value="其他" />
           </el-select>
         </el-form-item>
         <el-form-item label="标题"><el-input v-model="createForm.title" /></el-form-item>

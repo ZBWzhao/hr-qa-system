@@ -6,6 +6,7 @@ import re
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
 from app.models.qa import QARecord
+from app.services.ticket_flow_service import is_contextual_ticket_apply
 
 
 # follow-up 标记词
@@ -724,6 +725,16 @@ def rewrite_followup_question(question: str, context: Dict[str, Any]) -> Dict[st
     last_question = context.get("last_question", "")
     last_subtopic = context.get("last_subtopic", "")
 
+    # 0a. 证明办理语境：用户看完流程后用「申请/办理」等短句续办
+    if topic == "certify_ticket" and is_contextual_ticket_apply(q):
+        return {
+            "is_followup": True,
+            "resolved_question": "我想申请在职证明",
+            "inherited_topic": "certify_ticket",
+            "context_used": True,
+            "is_ticket_question": True,
+        }
+
     # 0. 问题本身含明确领域词 → 直接展开（无需上下文）
     standalone = _try_standalone_expand(q)
     if standalone:
@@ -887,10 +898,10 @@ def rewrite_followup_question(question: str, context: Dict[str, Any]) -> Dict[st
             }
 
     # 场景5：证明/工单主题
-    if topic == "certify_ticket":
+    if topic == "证明开具_ticket":
         from app.services.ticket_flow_service import is_ticket_flow_followup
 
-        if is_ticket_flow_followup(q, "certify"):
+        if is_ticket_flow_followup(q, "证明开具"):
             resolved = q
             if "这个" in q or "那个" in q:
                 if any(kw in q for kw in ["多久", "几天", "时间", "要等"]):

@@ -20,12 +20,13 @@ def list_notices(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    from sqlalchemy import or_
     query = db.query(Notice)
     now = datetime.now()
     query = query.filter((Notice.expire_at == None) | (Notice.expire_at > now))
-    # 部门隔离：非管理员只能看到自己部门的公告
+    # 部门隔离：非管理员只能看到自己部门的公告或通用公告（department_id 为 None）
     if current_user.role != "admin" and current_user.department_id:
-        query = query.filter(Notice.department_id == current_user.department_id)
+        query = query.filter(or_(Notice.department_id == current_user.department_id, Notice.department_id == None))
 
     read_ids = set(
         r.notice_id
@@ -57,11 +58,12 @@ def list_notices(
 
 @router.get("/unread-count")
 def unread_count(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from sqlalchemy import or_
     read_ids = set(r.notice_id for r in db.query(NoticeRead).filter(NoticeRead.user_id == current_user.id).all())
     now = datetime.now()
     query = db.query(Notice).filter((Notice.expire_at == None) | (Notice.expire_at > now))
     if current_user.role != "admin" and current_user.department_id:
-        query = query.filter(Notice.department_id == current_user.department_id)
+        query = query.filter(or_(Notice.department_id == current_user.department_id, Notice.department_id == None))
     total = query.count()
     read_count = len(read_ids)
     return success({"unread": total - read_count})

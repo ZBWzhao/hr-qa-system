@@ -54,9 +54,10 @@ class BatchItemImport(BaseModel):
 def list_guide(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """新手指引目录（不含完整答案，点击条目再查）"""
     query = db.query(GuideCategory)
-    # 部门隔离：非管理员只能看到自己部门的指引
+    # 部门隔离：非管理员只能看到自己部门的指引或通用指引（department_id 为 None）
     if current_user.role != "admin" and current_user.department_id:
-        query = query.filter(GuideCategory.department_id == current_user.department_id)
+        from sqlalchemy import or_
+        query = query.filter(or_(GuideCategory.department_id == current_user.department_id, GuideCategory.department_id == None))
     categories = query.order_by(GuideCategory.sort_order).all()
     result = []
     for cat in categories:

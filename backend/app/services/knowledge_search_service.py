@@ -4,11 +4,21 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from app.models.document import Document
 from app.models.notice import Notice
 from app.services.rag.vectorstore import search_similar
 from app.services.text_splitter import extract_keywords
+
+
+def _apply_document_department_filter(query, department_id: int = None):
+    """部门文档 + 全公司通用文档（department_id 为空）"""
+    if department_id:
+        return query.filter(
+            or_(Document.department_id == department_id, Document.department_id.is_(None))
+        )
+    return query
 
 
 def search_active_notices(db: Session, question: str, limit: int = 3, department_id: int = None) -> list[dict]:
@@ -139,8 +149,7 @@ def should_prefer_dynamic_knowledge(
 def search_documents_by_keyword(db: Session, question: str, limit: int = 3, department_id: int = None) -> list[dict]:
     """标题/正文关键词兜底检索（向量未命中或分数偏低时使用），支持部门隔离"""
     query = db.query(Document).filter(Document.status == "published")
-    if department_id:
-        query = query.filter(Document.department_id == department_id)
+    query = _apply_document_department_filter(query, department_id)
     docs = query.all()
     keywords = extract_keywords(question)
     q = (question or "").strip()
@@ -194,8 +203,7 @@ def find_published_document_by_title(db: Session, title_hint: str, department_id
 
     hint = re.sub(r"\s+", "", title_hint.strip())
     query = db.query(Document).filter(Document.status == "published")
-    if department_id:
-        query = query.filter(Document.department_id == department_id)
+    query = _apply_document_department_filter(query, department_id)
     docs = query.all()
     best: Optional[Document] = None
     best_score = 0
@@ -217,10 +225,71 @@ def find_published_document_by_title(db: Session, title_hint: str, department_id
 
 def list_published_document_titles(db: Session, limit: int = 20, department_id: int = None) -> list[str]:
     query = db.query(Document).filter(Document.status == "published")
-    if department_id:
-        query = query.filter(Document.department_id == department_id)
+    query = _apply_document_department_filter(query, department_id)
     docs = query.order_by(Document.updated_at.desc()).limit(limit).all()
     return [d.title for d in docs if d.title]
+
+
+# 主题关键词 → 制度文档标题（无书名号时兜底）
+TOPIC_DOCUMENT_HINTS: list[tuple[tuple[str, ...], tuple[str, ...], str]] = [
+    (("转正", "试用期"), ("流程", "讲解", "解读", "规定", "怎么", "如何", "条件", "材料", "要求", "多久", "标准"), "员工入职与转正管理办法"),
+    (("入职",), ("流程", "讲解", "解读", "准备", "材料", "手续", "怎么", "如何"), "员工入职与转正管理办法"),
+    (("在职证明", "工作证明", "收入证明", "证明开具", "开证明"), ("流程", "讲解", "解读", "怎么", "如何", "步骤", "办理", "规定"), "人事证明办理指引"),
+]
+
+
+def resolve_policy_document_title(question: str, explicit_title: str | None = None) -> str | None:
+    """根据问题推断应引用的制度文档标题"""
+    if explicit_title and explicit_title.strip():
+        return explicit_title.strip()
+    q = (question or "").strip()
+    for topic_words, intent_words, doc_title in TOPIC_DOCUMENT_HINTS:
+        if any(w in q for w in topic_words) and any(w in q for w in intent_words):
+            return doc_title
+    if any(w in q for w in ("转正", "试用期")) and any(w in q for w in ("流程", "讲解", "解读", "怎么办", "是什么")):
+        return "员工入职与转正管理办法"
+    return None
+
+
+def load_policy_document(
+    db: Session,
+    question: str,
+    title_hint: str | None = None,
+    department_id: int = None,
+) -> Optional[Document]:
+    """加载制度文档：已发布优先，向量命中时可回退到已索引文档"""
+    from app.services.rag.vectorstore import search_similar
+
+    resolved_title = resolve_policy_document_title(question, title_hint)
+    if resolved_title:
+        doc = find_published_document_by_title(db, resolved_title, department_id=department_id)
+        if doc:
+            return doc
+
+    kw_hits = search_documents_by_keyword(db, question, limit=1, department_id=department_id)
+    if kw_hits:
+        doc = db.query(Document).filter(Document.id == kw_hits[0]["doc_id"]).first()
+        if doc and doc.content_text:
+            return doc
+
+    if resolved_title:
+        doc = (
+            db.query(Document)
+            .filter(Document.title.contains(resolved_title.replace("员工", "").strip() or resolved_title))
+            .order_by(Document.updated_at.desc())
+            .first()
+        )
+        if doc and doc.content_text:
+            return doc
+
+    raw = search_similar(question, top_k=1, department_id=department_id)
+    if raw and float(raw[0].get("score", 0)) >= 0.42:
+        doc_id = (raw[0].get("metadata") or {}).get("doc_id")
+        if doc_id is not None:
+            doc = db.query(Document).filter(Document.id == int(doc_id)).first()
+            if doc and doc.content_text:
+                return doc
+    return None
 
 
 def build_knowledge_context(notice_hits: list[dict], doc_hits: list[dict], max_chars: int = 2500) -> tuple[str, list[dict]]:

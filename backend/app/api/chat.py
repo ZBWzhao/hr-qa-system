@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.response import success, error
+from app.constants.ticket_type_labels import normalize_ticket_type
 from app.schemas.qa import ChatRequest, ChatResponse
 from app.models.qa import QARecord, Rule, QAMiss
 from app.models.document import Document, DocumentChunk
@@ -59,6 +60,7 @@ from app.services.ticket_flow_service import (
     normalize_ticket_filled,
     ticket_draft_display_fields,
     _is_field_change_intent,
+    is_contextual_ticket_apply,
 )
 from app.services.knowledge_search_service import (
     search_active_notices,
@@ -68,7 +70,10 @@ from app.services.knowledge_search_service import (
     search_documents_by_keyword,
     find_published_document_by_title,
     list_published_document_titles,
+    load_policy_document,
+    resolve_policy_document_title,
 )
+from app.services.policy_intent_service import is_policy_consultation
 from app.services.typo_corrector import normalize_question_typos
 from app.services.notice_flow_service import (
     is_notice_publish_intent,
@@ -241,6 +246,94 @@ def _extract_doc_section(content: str, start_marker: str, end_marker: str = "") 
     return segment.strip()
 
 
+def _has_certify_ticket_context(recent_context: dict) -> bool:
+    topic = recent_context.get("conversation_topic") or recent_context.get("last_topic", "")
+    if topic == "certify_ticket":
+        return True
+    summary = recent_context.get("last_answer_summary") or ""
+    certify_keys = ("在职证明", "工作证明", "收入证明", "开证明", "证明开具", "证明材料")
+    if any(k in summary for k in certify_keys):
+        return True
+    recent_qs = recent_context.get("recent_user_questions") or []
+    return any(any(k in q for k in certify_keys) for q in recent_qs)
+
+
+def _try_contextual_ticket_create(
+    question: str,
+    conv_id: str,
+    user_id: int,
+    db: Session,
+    recent_context: dict,
+) -> Optional[dict]:
+    """结合上文主题，理解「申请/办理」等短句并启动对应工单"""
+    if not is_contextual_ticket_apply(question):
+        return None
+
+    topic = recent_context.get("conversation_topic") or recent_context.get("last_topic", "")
+    if topic == "certify_ticket" or _has_certify_ticket_context(recent_context):
+        return _begin_ticket_flow(
+            "我想申请在职证明",
+            conv_id,
+            user_id,
+            db,
+            "证明开具",
+        )
+    return None
+
+
+def _is_certify_process_question(question: str, recent_context: dict) -> bool:
+    if not is_policy_consultation(question):
+        return False
+    if not _has_certify_ticket_context(recent_context):
+        if not any(k in question for k in ("证明", "在职", "收入", "开具")):
+            return False
+    return any(k in question for k in ("流程", "讲解", "解读", "怎么", "如何", "步骤", "办理", "手续", "详细", "了解"))
+
+
+def _try_certify_process_answer(
+    db: Session,
+    user_id: int,
+    conv_id: str,
+    question: str,
+    recent_context: dict,
+) -> Optional[dict]:
+    """证明开具流程咨询（取消工单后仍可基于上下文讲解流程）"""
+    if not _is_certify_process_question(question, recent_context):
+        return None
+
+    answer = (
+        "**在职证明开具流程（简明版）**\n\n"
+        "1. **发起申请**：在智能问答中说「我想申请在职证明」，或通过「办事项」发起证明开具。\n"
+        "2. **填写信息**：说明证明用途、接收单位、是否需要盖章、期望完成时间（也可点「手动填写」打开表单）。\n"
+        "3. **确认提交**：信息无误后点击「确认提交」，系统会生成工单编号。\n"
+        "4. **HR 处理**：HR 一般在 **1-3 个工作日** 内开具；如需加急可在说明中注明。\n"
+        "5. **查看进度**：在「我的 → 人工请求」跟踪处理状态。\n\n"
+        "**小贴士**：在职证明通常**不需要您额外准备材料**，HR 会根据人事档案直接开具。\n\n"
+        "如果您已了解流程，随时可以说「我想申请在职证明」重新开始办理。"
+    )
+    record = QARecord(
+        user_id=user_id, question=question, answer=answer,
+        answer_type="rag", source_docs=json.dumps([]), conversation_id=conv_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return success({
+        "answer": answer, "answer_type": "rag", "source_docs": [],
+        "record_id": record.id, "conversation_id": conv_id,
+        "required_slots": [], "filled_slots": {}, "actions": [],
+    })
+
+
+def _expand_policy_question_with_context(question: str, recent_context: dict) -> str:
+    if _extract_document_title_reference(question) or resolve_policy_document_title(question):
+        return question
+    if _has_certify_ticket_context(recent_context) and is_policy_consultation(question):
+        if any(k in question for k in ("流程", "讲解", "解读", "怎么", "如何", "步骤")):
+            return f"在职证明开具流程是什么？{question}"
+    return question
+
+
 def _try_document_interpretation_answer(
     db: Session,
     user_id: int,
@@ -248,17 +341,14 @@ def _try_document_interpretation_answer(
     question: str,
     user: User,
     department_id: int = None,
+    recent_context: dict = None,
 ) -> Optional[dict]:
     if not _is_plain_language_request(question):
         return None
 
-    title_hint = _extract_document_title_reference(question)
-    doc = find_published_document_by_title(db, title_hint, department_id=department_id) if title_hint else None
-
-    if not doc and title_hint:
-        kw_hits = search_documents_by_keyword(db, title_hint, limit=1, department_id=department_id)
-        if kw_hits:
-            doc = db.query(Document).filter(Document.id == kw_hits[0]["doc_id"]).first()
+    expanded = _expand_policy_question_with_context(question, recent_context or {})
+    title_hint = _extract_document_title_reference(expanded) or resolve_policy_document_title(expanded)
+    doc = load_policy_document(db, expanded, title_hint=title_hint, department_id=department_id)
 
     if not doc:
         if any(k in question for k in ("哪些文档", "什么文档", "有哪些制度", "能解读什么")):
@@ -303,6 +393,65 @@ def _try_document_interpretation_answer(
         user_profile=user_profile,
     )
     sources = [{"type": "document", "doc_id": doc.id, "title": doc.title, "chunk": doc.content_text[:100]}]
+    record = QARecord(
+        user_id=user_id, question=question, answer=answer,
+        answer_type="rag", source_docs=json.dumps(sources), conversation_id=conv_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return success({
+        "answer": answer, "answer_type": "rag", "source_docs": sources,
+        "record_id": record.id, "conversation_id": conv_id,
+        "required_slots": [], "filled_slots": {}, "actions": [],
+    })
+
+
+def _is_probation_policy_question(question: str) -> bool:
+    if not any(k in question for k in ("转正", "试用期")):
+        return False
+    if is_policy_consultation(question):
+        return True
+    return any(k in question for k in ("流程", "规定", "条件", "材料", "要求", "多久", "怎么", "如何", "是什么", "步骤"))
+
+
+def _try_probation_policy_answer(
+    db: Session,
+    user_id: int,
+    conv_id: str,
+    question: str,
+    user: User,
+    department_id: int = None,
+) -> Optional[dict]:
+    """转正/试用期制度咨询（非工单办理）"""
+    if not _is_probation_policy_question(question):
+        return None
+
+    doc = load_policy_document(
+        db, question, title_hint="员工入职与转正管理办法", department_id=department_id,
+    )
+    if not doc or not doc.content_text:
+        return None
+
+    knowledge = (
+        _extract_doc_section(doc.content_text, "第四章", "第五章")
+        or _extract_doc_section(doc.content_text, "转正", "第五章")
+        or doc.content_text[:3500]
+    )
+    interpret_mode = _is_plain_language_request(question)
+    user_profile = _build_user_profile_text(user) if interpret_mode or _is_personal_rights_request(question) else ""
+    history = get_conversation_context(db, user_id, conv_id)
+    answer = _ai_enhance_answer(
+        question=question,
+        knowledge=f"【{doc.title}】\n{knowledge}",
+        history=history,
+        source_label=f"制度文档《{doc.title}》",
+        context_hint="用户咨询转正/试用期相关规定，请基于制度原文作答；这是在问制度细节，不是要提交工单。",
+        fallback=knowledge[:1200],
+        interpret_mode=interpret_mode,
+        user_profile=user_profile,
+    )
+    sources = [{"type": "document", "doc_id": doc.id, "title": doc.title, "chunk": knowledge[:100]}]
     record = QARecord(
         user_id=user_id, question=question, answer=answer,
         answer_type="rag", source_docs=json.dumps(sources), conversation_id=conv_id,
@@ -813,7 +962,8 @@ def _begin_ticket_flow(
     ticket_type: str,
 ) -> dict:
     """在工单类型已确定后，初始化槽位并返回澄清或确认卡片"""
-    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+    ticket_type = normalize_ticket_type(ticket_type)
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
     slots = extract_ticket_slots(question, ticket_type)
 
     filled_slots = {
@@ -949,32 +1099,11 @@ def handle_ticket_type_select(question: str, state, user_id: int, db: Session) -
     conv_id = state.conversation_id
 
     if is_ticket_cancel_intent(question):
-        state_service.clear_pending_intent(user_id, conv_id)
-        answer = "好的，已取消本次工单申请。如需办理，您可以随时重新发起。"
-        record = QARecord(
-            user_id=user_id,
-            question=question,
-            answer=answer,
-            answer_type="ticket_clarification",
-            source_docs=json.dumps([]),
-            conversation_id=conv_id,
-        )
-        db.add(record)
-        db.commit()
-        db.refresh(record)
-        return success({
-            "answer": answer,
-            "answer_type": "ticket_clarification",
-            "intent": "ticket_create",
-            "source_docs": [],
-            "record_id": record.id,
-            "conversation_id": conv_id,
-            "required_slots": [],
-            "filled_slots": {},
-            "actions": [],
-        })
+        return _save_ticket_cancel_response(db, user_id, conv_id, question)
 
     ticket_type = parse_ticket_type_choice(question)
+    if ticket_type:
+        ticket_type = normalize_ticket_type(ticket_type)
     if not ticket_type:
         answer = build_ticket_type_selection_answer()
         answer = "抱歉，我没能识别您要申请的工单类型。\n\n" + answer
@@ -1211,7 +1340,7 @@ def handle_ticket_create(question: str, conv_id: str, user_id: int, db: Session)
     if intent_result.get("needs_type_selection"):
         return _start_ticket_type_selection(question, conv_id, user_id, db)
 
-    ticket_type = intent_result["ticket_type"]
+    ticket_type = normalize_ticket_type(intent_result["ticket_type"])
     return _begin_ticket_flow(question, conv_id, user_id, db, ticket_type)
 
 
@@ -1265,9 +1394,69 @@ def _collect_ticket_slot_updates(
     return apply_single_missing_slot_fallback(question, ticket_type, config, filled, slots)
 
 
-def _ticket_draft_fields(config: dict, filled: dict) -> dict:
-    """确认卡片仅展示必填槽位"""
-    return ticket_draft_display_fields(config, filled)
+def handle_transfer_to_hr(
+    user_id: int,
+    conv_id: str,
+    db: Session,
+    context_question: str = "",
+) -> dict:
+    """转人工处理：初始化「其他」类工单并打开手动填写表单"""
+    ticket_type = normalize_ticket_type("其他")
+    config = TICKET_SLOT_CONFIG[ticket_type]
+    state_service = ConversationStateService(db)
+
+    filled_slots = {
+        "ticket_type": ticket_type,
+        "title": config["title"],
+        "display_type": config["display_type"],
+        "issue_type": "HR人工咨询",
+    }
+    ctx = (context_question or "").strip()
+    if ctx and ctx not in ("转人工处理", "我需要 HR 人工处理问题", "转人工", "人工处理"):
+        filled_slots["description"] = ctx
+
+    state_service.set_pending_intent(
+        user_id=user_id,
+        conversation_id=conv_id,
+        intent="ticket_create",
+        required_slots=config["required_slots"],
+    )
+    state_service.update_filled_slots(user_id, conv_id, filled_slots)
+
+    answer = (
+        "好的，已为您准备**人工处理工单**。\n\n"
+        "请在下方表单中填写问题类型、问题说明和期望处理时间，确认后即可提交给 HR。"
+    )
+    if ctx and ctx not in ("转人工处理", "我需要 HR 人工处理问题", "转人工", "人工处理"):
+        answer += "\n\n已根据您刚才的咨询预填「问题说明」，您可在表单中修改补充。"
+
+    record = QARecord(
+        user_id=user_id,
+        question="转人工处理",
+        answer=answer,
+        answer_type="ticket_clarification",
+        source_docs=json.dumps([]),
+        conversation_id=conv_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    return success({
+        "answer": answer,
+        "answer_type": "ticket_clarification",
+        "intent": "ticket_create",
+        "ticket_type": ticket_type,
+        "display_type": config["display_type"],
+        "source_docs": [],
+        "record_id": record.id,
+        "conversation_id": conv_id,
+        "required_slots": config["required_slots"],
+        "filled_slots": filled_slots,
+        "slot_labels": config["slot_labels"],
+        "actions": TICKET_CLARIFY_ACTIONS,
+        "open_manual_form": True,
+    })
 
 
 def handle_manual_ticket_fill(
@@ -1293,12 +1482,12 @@ def handle_manual_ticket_fill(
     if not ticket_type:
         return None
 
-    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
     cleaned = {
         k: v for k, v in ticket_slots.items()
         if k in config["required_slots"] and v not in (None, "")
     }
-    if ticket_type == "attendance_exception" and cleaned.get("reason"):
+    if ticket_type == "考勤异常" and cleaned.get("reason"):
         cleaned["description"] = cleaned["reason"]
 
     for key, val in cleaned.items():
@@ -1329,34 +1518,11 @@ def handle_ticket_pending(question: str, state, user_id: int, db: Session, actio
     except Exception:
         filled = {}
 
-    ticket_type = filled.get("ticket_type", "other")
-    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+    ticket_type = filled.get("ticket_type", "其他")
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
 
     if is_ticket_cancel_intent(question):
-        state_service.clear_pending_intent(user_id, conv_id)
-        answer = "好的，已取消本次工单申请。如需办理，您可以随时重新发起。"
-        record = QARecord(
-            user_id=user_id,
-            question=question,
-            answer=answer,
-            answer_type="ticket_clarification",
-            source_docs=json.dumps([]),
-            conversation_id=conv_id,
-        )
-        db.add(record)
-        db.commit()
-        db.refresh(record)
-        return success({
-            "answer": answer,
-            "answer_type": "ticket_clarification",
-            "intent": "ticket_create",
-            "source_docs": [],
-            "record_id": record.id,
-            "conversation_id": conv_id,
-            "required_slots": [],
-            "filled_slots": {},
-            "actions": [],
-        })
+        return _save_ticket_cancel_response(db, user_id, conv_id, question)
 
     if is_general_question_instead_of_ticket(question, ticket_type):
         state_service.pause_ticket_for_qa(user_id, conv_id)
@@ -1447,6 +1613,40 @@ def _save_ticket_clarification(
     })
 
 
+def _save_ticket_cancel_response(
+    db: Session,
+    user_id: int,
+    conv_id: str,
+    question: str,
+) -> dict:
+    """取消工单申请并清除会话中的工单待办状态"""
+    state_service = ConversationStateService(db)
+    state_service.clear_pending_intent(user_id, conv_id)
+    answer = "好的，已取消本次工单申请。如需办理，您可以随时重新发起。"
+    record = QARecord(
+        user_id=user_id,
+        question=question,
+        answer=answer,
+        answer_type="ticket_cancelled",
+        source_docs=json.dumps([]),
+        conversation_id=conv_id,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return success({
+        "answer": answer,
+        "answer_type": "ticket_cancelled",
+        "intent": "ticket_create",
+        "source_docs": [],
+        "record_id": record.id,
+        "conversation_id": conv_id,
+        "required_slots": [],
+        "filled_slots": {},
+        "actions": [],
+    })
+
+
 def handle_paused_ticket(
     question: str, state, user_id: int, db: Session, action: str = None
 ) -> Optional[dict]:
@@ -1454,34 +1654,11 @@ def handle_paused_ticket(
     state_service = ConversationStateService(db)
     conv_id = state.conversation_id
     filled = state_service.get_filled_slots(user_id, conv_id)
-    ticket_type = filled.get("ticket_type", "other")
-    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+    ticket_type = filled.get("ticket_type", "其他")
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
 
     if is_ticket_cancel_intent(question):
-        state_service.clear_pending_intent(user_id, conv_id)
-        answer = "好的，已取消本次工单申请。如需办理，您可以随时重新发起。"
-        record = QARecord(
-            user_id=user_id,
-            question=question,
-            answer=answer,
-            answer_type="ticket_clarification",
-            source_docs=json.dumps([]),
-            conversation_id=conv_id,
-        )
-        db.add(record)
-        db.commit()
-        db.refresh(record)
-        return success({
-            "answer": answer,
-            "answer_type": "ticket_clarification",
-            "intent": "ticket_create",
-            "source_docs": [],
-            "record_id": record.id,
-            "conversation_id": conv_id,
-            "required_slots": [],
-            "filled_slots": {},
-            "actions": [],
-        })
+        return _save_ticket_cancel_response(db, user_id, conv_id, question)
 
     if is_ticket_resume_intent(question, action):
         if is_ticket_confirm_intent(question, action):
@@ -1554,7 +1731,7 @@ def handle_paused_ticket(
 
 def _build_ticket_confirm(question: str, conv_id: str, user_id: int, db: Session, ticket_type: str, state_service: ConversationStateService) -> dict:
     """构建工单确认卡片"""
-    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
     filled = normalize_ticket_filled(ticket_type, state_service.get_filled_slots(user_id, conv_id))
     state_service.update_filled_slots(user_id, conv_id, filled)
 
@@ -1627,11 +1804,16 @@ def _lookup_conversation_ticket(db: Session, user_id: int, conv_id: str) -> Opti
 def _ticket_context_active(state, recent_context: dict) -> bool:
     if state and state.pending_intent == "ticket_create":
         return True
+    last_type = recent_context.get("last_answer_type", "")
+    if last_type == "ticket_cancelled":
+        return False
+    if last_type == "ticket_clarification" and (not state or not state.pending_intent):
+        return False
+    if last_type in ("ticket_confirm", "ticket_qa", "ticket_submitted"):
+        return True
     topic = recent_context.get("conversation_topic") or recent_context.get("last_topic", "")
-    if topic == "certify_ticket":
-        return True
-    if recent_context.get("last_answer_type") in ("ticket_confirm", "ticket_qa", "ticket_submitted", "ticket_clarification"):
-        return True
+    if topic in ("证明开具_ticket", "certify_ticket"):
+        return last_type in ("ticket_confirm", "ticket_qa", "ticket_submitted")
     return False
 
 
@@ -1720,12 +1902,19 @@ def _try_ticket_context_answer(
     if not in_ticket_context:
         return None
 
+    has_active_flow = bool(state and state.pending_intent == "ticket_create")
+    has_submitted = bool(ticket_record) or recent_context.get("last_answer_type") == "ticket_submitted"
+    if is_policy_consultation(question):
+        return None
+    if not has_active_flow and not has_submitted and not is_ticket_info_query(question):
+        return None
+
     state_service = ConversationStateService(db)
     filled = state_service.get_filled_slots(user_id, conv_id) if state else {}
-    ticket_type = filled.get("ticket_type") or "certify"
+    ticket_type = filled.get("ticket_type") or "证明开具"
     if not filled.get("ticket_type"):
         filled = {**filled, "ticket_type": ticket_type}
-    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
 
     if is_ticket_validation_intent(question) and state and state.pending_intent == "ticket_create":
         answer = build_ticket_validation_answer(config, filled)
@@ -1760,6 +1949,8 @@ def _submit_ticket(
     state_service: ConversationStateService,
 ) -> dict:
     """正式创建并提交工单"""
+    ticket_type = normalize_ticket_type(ticket_type)
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
     filled = normalize_ticket_filled(ticket_type, filled)
 
     desc_parts = []
@@ -1838,34 +2029,11 @@ def handle_ticket_confirm(question: str, state, user_id: int, db: Session, actio
     except Exception:
         filled = {}
 
-    ticket_type = filled.get("ticket_type", "other")
-    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+    ticket_type = filled.get("ticket_type", "其他")
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
 
     if is_ticket_cancel_intent(question):
-        state_service.clear_pending_intent(user_id, conv_id)
-        answer = "好的，已取消本次工单申请。如需办理，您可以随时重新发起。"
-        record = QARecord(
-            user_id=user_id,
-            question=question,
-            answer=answer,
-            answer_type="ticket_clarification",
-            source_docs=json.dumps([]),
-            conversation_id=conv_id,
-        )
-        db.add(record)
-        db.commit()
-        db.refresh(record)
-        return success({
-            "answer": answer,
-            "answer_type": "ticket_clarification",
-            "intent": "ticket_create",
-            "source_docs": [],
-            "record_id": record.id,
-            "conversation_id": conv_id,
-            "required_slots": [],
-            "filled_slots": {},
-            "actions": [],
-        })
+        return _save_ticket_cancel_response(db, user_id, conv_id, question)
 
     if is_ticket_modify_intent(question, action):
         state_service.set_ticket_modify_mode(user_id, conv_id)
@@ -2124,6 +2292,11 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     # 部门数据隔离：admin 看全部，其他用户只看本部门
     dept_id = None if current_user.role == "admin" else current_user.department_id
 
+    # 转人工（文本触发，无 action 时）
+    _TRANSFER_PHRASES = ("转人工处理", "转人工", "我需要 HR 人工处理问题", "我要转人工", "需要人工处理")
+    if not data.action and any(p in question for p in _TRANSFER_PHRASES):
+        return handle_transfer_to_hr(current_user.id, conv_id, db, context_question="")
+
     # Step 2: 获取会话状态
     state_service = ConversationStateService(db)
     state = state_service.get_or_create_state(current_user.id, conv_id)
@@ -2132,6 +2305,15 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     state_service.increment_turn_count(current_user.id, conv_id)
 
     paused_notice = ""
+
+    # 转人工：直接初始化工单并打开表单（优先于 pending_intent 处理）
+    if data.action == "transfer_to_hr":
+        ctx = (data.context_question or "").strip()
+        if not ctx:
+            q = question.strip()
+            if q and q not in ("转人工处理", "我需要 HR 人工处理问题", "转人工", "人工处理"):
+                ctx = q
+        return handle_transfer_to_hr(current_user.id, conv_id, db, context_question=ctx)
 
     # Step 4: 【第一优先级】检查 pending_intent
     if state.pending_intent:
@@ -2143,8 +2325,8 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
                 if result is not None:
                     return result
             filled_now = state_service.get_filled_slots(current_user.id, conv_id)
-            ticket_type = filled_now.get("ticket_type", "other")
-            config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+            ticket_type = filled_now.get("ticket_type", "其他")
+            config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
             return _save_ticket_clarification(
                 db, current_user.id, conv_id, question,
                 "请通过「手动填写」按钮打开表单填写工单信息。",
@@ -2246,12 +2428,26 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
                 return _attach_paused_notice(onboarding_choice_result)
 
     # 按文档名通俗解读 / 入职准备（角色区分）
+    certify_result = _try_certify_process_answer(
+        db, current_user.id, conv_id, question, recent_context,
+    )
+    if certify_result:
+        return _attach_paused_notice(certify_result)
+
     interpret_result = _try_document_interpretation_answer(
         db, current_user.id, conv_id, question, current_user,
         department_id=dept_id,
+        recent_context=recent_context,
     )
     if interpret_result:
         return _attach_paused_notice(interpret_result)
+
+    probation_result = _try_probation_policy_answer(
+        db, current_user.id, conv_id, question, current_user,
+        department_id=dept_id,
+    )
+    if probation_result:
+        return _attach_paused_notice(probation_result)
 
     onboarding_result = _try_onboarding_prep_answer(
         db, current_user.id, conv_id, question, current_user,
@@ -2310,6 +2506,12 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
             )
 
     # Step 6: 【第二优先级】判断是否是工单意图
+    contextual_ticket = _try_contextual_ticket_create(
+        question, conv_id, current_user.id, db, recent_context,
+    )
+    if contextual_ticket:
+        return contextual_ticket
+
     ticket_result = handle_ticket_create(question, conv_id, current_user.id, db)
     if ticket_result:
         return ticket_result
@@ -2326,15 +2528,15 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
     if _ticket_context_active(state, recent_context):
         if is_ticket_validation_intent(question) and state.pending_intent == "ticket_create":
             filled = state_service.get_filled_slots(current_user.id, conv_id)
-            ticket_type = filled.get("ticket_type", "certify")
-            config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+            ticket_type = filled.get("ticket_type", "证明开具")
+            config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
             return _save_ticket_followup_response(
                 db, current_user.id, conv_id, question,
                 build_ticket_validation_answer(config, filled),
                 ticket_type, filled,
             )
         if (
-            conversation_topic_early == "certify_ticket"
+            conversation_topic_early == "证明开具_ticket"
             and state.pending_intent == "ticket_create"
             and is_ticket_confirm_intent(question, data.action)
         ):
@@ -2582,7 +2784,11 @@ def chat(data: ChatRequest, current_user: User = Depends(get_current_user), db: 
         db.commit()
         db.refresh(miss)
 
-        clarification = f"抱歉，关于「{question}」，当前知识库暂未找到明确依据。\n\n建议您：\n1. 换个关键词重新提问\n2. 联系HR部门获取帮助\n3. 提交工单进行详细咨询"
+        clarification = f"抱歉，关于「{question}」，当前知识库暂未找到明确依据。\n\n建议您：\n1. 换个关键词重新提问\n2. 联系 HR 部门获取帮助"
+        if is_policy_consultation(question):
+            clarification += "\n3. 可尝试指定制度名称，如「通俗解读一下《员工入职与转正管理办法》」"
+        else:
+            clarification += "\n3. 如需办理具体事项，可说「我要申请…」提交工单"
 
         record = QARecord(
             user_id=current_user.id,
@@ -2695,35 +2901,20 @@ def get_chat_stats(current_user: User = Depends(get_current_user)):
 def get_category_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """获取咨询类别分布统计"""
     from sqlalchemy import func
+    from collections import defaultdict
     from app.models.qa import QARecord
+    from app.constants.answer_type_labels import get_answer_type_label
 
     stats = db.query(
         QARecord.answer_type,
         func.count(QARecord.id)
     ).group_by(QARecord.answer_type).all()
 
-    category_map = {
-        'faq': '标准答案',
-        'rule': '规则匹配',
-        'rag': '文档检索',
-        'miss': '未命中',
-        'clarification': '澄清追问',
-        'ticket_form': '工单申请',
-        'ticket_qa': '工单咨询',
-        'ticket_submitted': '工单已提交',
-        'notice_form': '公告发布',
-        'notice_confirm': '公告确认',
-        'no_permission': '无权限'
-    }
-
-    result = []
+    merged: dict[str, int] = defaultdict(int)
     for answer_type, count in stats:
-        category = category_map.get(answer_type, '其他')
-        result.append({
-            'name': category,
-            'value': count,
-            'type': answer_type
-        })
+        merged[get_answer_type_label(answer_type)] += count
+
+    result = [{'name': name, 'value': count} for name, count in merged.items()]
 
     result.sort(key=lambda x: x['value'], reverse=True)
 

@@ -6,6 +6,7 @@ from sqlalchemy import or_
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_roles
 from app.core.response import success, error, paginated
+from app.constants.ticket_type_labels import get_ticket_type_display, normalize_ticket_type
 from app.schemas.ticket import TicketCreate, TicketUpdate, TicketOut
 from app.models.ticket import Ticket
 from app.models.user import User
@@ -40,7 +41,7 @@ def list_tickets(
     if status:
         query = query.filter(Ticket.status == status)
     if type:
-        query = query.filter(Ticket.type == type)
+        query = query.filter(Ticket.type == normalize_ticket_type(type))
     # Admin 可以通过 department_id 参数筛选
     if department_id is not None and current_user.role == "admin":
         if not any(j.target is User for j in query.column_descriptions):
@@ -56,6 +57,7 @@ def list_tickets(
         d = TicketOut.model_validate(t).model_dump()
         creator = db.query(User).filter(User.id == t.creator_id).first()
         d["creator_name"] = creator.real_name if creator else "未知"
+        d["type_label"] = get_ticket_type_display(t.type)
         if creator and creator.department_id:
             dept = db.query(Department).filter(Department.id == creator.department_id).first()
             d["department_name"] = dept.name if dept else "未分配"
@@ -110,14 +112,17 @@ def get_ticket(ticket_id: int, current_user: User = Depends(get_current_user), d
         return error("工单不存在")
     if current_user.role not in ("hr", "admin") and ticket.creator_id != current_user.id:
         return error("无权限查看该工单", code=403)
-    return success(TicketOut.model_validate(ticket).model_dump())
+    d = TicketOut.model_validate(ticket).model_dump()
+    d["type_label"] = get_ticket_type_display(ticket.type)
+    return success(d)
 
 
 @router.post("")
 def create_ticket(data: TicketCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    canonical_type = normalize_ticket_type(data.type)
     ticket = Ticket(
         ticket_no=generate_ticket_no(db),
-        type=data.type,
+        type=canonical_type,
         title=data.title,
         description=data.description,
         attachments=data.attachments,
@@ -127,7 +132,9 @@ def create_ticket(data: TicketCreate, current_user: User = Depends(get_current_u
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
-    return success(TicketOut.model_validate(ticket).model_dump())
+    d = TicketOut.model_validate(ticket).model_dump()
+    d["type_label"] = get_ticket_type_display(ticket.type)
+    return success(d)
 
 
 @router.put("/{ticket_id}")
@@ -145,4 +152,6 @@ def update_ticket(ticket_id: int, data: TicketUpdate, current_user: User = Depen
         ticket.resolve_note = data.resolve_note
     db.commit()
     db.refresh(ticket)
-    return success(TicketOut.model_validate(ticket).model_dump())
+    d = TicketOut.model_validate(ticket).model_dump()
+    d["type_label"] = get_ticket_type_display(ticket.type)
+    return success(d)

@@ -35,10 +35,10 @@ def extract_ticket_slots(
     if _skip_slot_extraction(text):
         return {}
 
-    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["other"])
+    config = TICKET_SLOT_CONFIG.get(ticket_type, TICKET_SLOT_CONFIG["其他"])
 
     # 考勤异常：逗号分隔输入用确定性规则，避免 AI 把类型/原因搞混
-    if ticket_type == "attendance_exception":
+    if ticket_type == "考勤异常":
         structured = _parse_attendance_comma_segments(text)
         if structured:
             return _finalize_slots(ticket_type, structured)
@@ -56,7 +56,7 @@ def extract_ticket_slots(
 
 def _sanitize_attendance_slots(slots: Dict[str, Any], text: str, ticket_type: str) -> Dict[str, Any]:
     """若原因字段被填成整句，尝试用逗号规则重新解析"""
-    if ticket_type != "attendance_exception" or not slots:
+    if ticket_type != "考勤异常" or not slots:
         return slots
     reason = str(slots.get("reason") or "")
     if ("," in reason or "，" in reason) and re.search(r"\d{4}", reason):
@@ -73,25 +73,25 @@ def _sanitize_attendance_slots(slots: Dict[str, Any], text: str, ticket_type: st
 
 def _finalize_slots(ticket_type: str, slots: Dict[str, Any]) -> Dict[str, Any]:
     result = dict(slots)
-    if ticket_type == "attendance_exception" and result.get("reason"):
+    if ticket_type == "考勤异常" and result.get("reason"):
         result["description"] = result["reason"]
     return result
 
 
 def _extract_ticket_slots_regex(text: str, ticket_type: str) -> Dict[str, Any]:
-    if ticket_type == "certify":
+    if ticket_type == "证明开具":
         return _extract_certify_slots(text)
-    elif ticket_type == "info_change":
+    elif ticket_type == "信息变更":
         return _extract_info_change_slots(text)
-    elif ticket_type == "attendance_exception":
+    elif ticket_type == "考勤异常":
         return _extract_attendance_exception_slots(text)
-    elif ticket_type == "leave_request":
+    elif ticket_type == "请假申请":
         return _extract_leave_request_slots(text)
-    elif ticket_type == "resignation":
+    elif ticket_type == "离职申请":
         return _extract_resignation_slots(text)
-    elif ticket_type == "onboarding_probation":
+    elif ticket_type == "入职转正":
         return _extract_onboarding_probation_slots(text)
-    elif ticket_type == "reimbursement":
+    elif ticket_type == "报销薪资":
         return _extract_reimbursement_slots(text)
     return _extract_other_slots(text)
 
@@ -349,7 +349,7 @@ def apply_single_missing_slot_fallback(
     if not value:
         return extracted
 
-    if ticket_type == "attendance_exception" and slot in ("reason", "description"):
+    if ticket_type == "考勤异常" and slot in ("reason", "description"):
         structured = _parse_attendance_comma_segments(q)
         if structured and structured.get("reason"):
             value = structured["reason"]
@@ -429,6 +429,7 @@ def _extract_resignation_slots(text: str) -> Dict[str, Any]:
 
     # resign_reason（离职原因）
     reason_patterns = [
+        r'因(.{2,40}?)(?:[，,。]|希望|打算|准备|想|要)',
         r'(?:原因|因为|由于|理由)[是为]?\s*(.{2,50})',
         r'(?:想|要)(?:去|回)?\s*(.{2,30}(?:发展|创业|深造|照顾|家庭|个人))',
     ]
@@ -457,7 +458,8 @@ def _extract_resignation_slots(text: str) -> Dict[str, Any]:
 
     # handover_person（工作交接人）
     handover_patterns = [
-        r'(?:交接[给给]?|交给|接替)[是为]?\s*([^，,。.、]{2,10})',
+        r'(?:工作)?交接[给给]\s*([^，,。.、\s]{2,10})',
+        r'(?:交给|接替)[是为]?\s*([^，,。.、\s]{2,10})',
         r'(?:交接人|接手人)[是为:：]?\s*([^，,。.、]{2,10})',
     ]
     for pattern in handover_patterns:

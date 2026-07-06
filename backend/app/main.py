@@ -53,6 +53,22 @@ def ensure_schema_updates():
         logger.warning("Schema update skipped: %s", e)
 
 
+def ensure_ticket_type_migration():
+    """将历史工单 type 统一为中文 canonical（幂等）"""
+    from app.core.database import SessionLocal
+    from app.constants.ticket_type_labels import migrate_ticket_types_in_db
+
+    db = SessionLocal()
+    try:
+        updated = migrate_ticket_types_in_db(db)
+        if updated:
+            logger.info("已将 %d 条工单的 type 迁移为中文规范值", updated)
+    except Exception as e:
+        logger.warning("Ticket type migration skipped: %s", e)
+    finally:
+        db.close()
+
+
 def init_rag_system():
     """初始化RAG系统：索引所有已发布文档到向量数据库"""
     try:
@@ -104,6 +120,7 @@ async def lifespan(app: FastAPI):
     logger.info("HR Copilot 启动中...")
     Base.metadata.create_all(bind=engine)
     ensure_schema_updates()
+    ensure_ticket_type_migration()
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)
     init_rag_system()

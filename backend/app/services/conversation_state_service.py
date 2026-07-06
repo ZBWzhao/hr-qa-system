@@ -309,4 +309,7 @@ class ConversationStateService:
         if not required:
             return True
 
-        return all(slot in filled for slot in required)
+        return all(
+            filled.get(slot) not in (None, "", 0, False)
+            for slot in required
+        )

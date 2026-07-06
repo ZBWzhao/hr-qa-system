@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "predev": "node -e \"const cp=require('child_process');const r=cp.execSync('netstat -ano',{encoding:'utf8'});const m=r.match(/TCP\\s+[^\\s]+:3000\\s+[^\\s]+\\s+LISTENING\\s+(\\d+)/);if(m){cp.execSync('taskkill /F /PID '+m[1]);console.log('Killed PID '+m[1]+' on port 3000')}else{console.log('Port 3000 is free')};\"",
+    "dev": "npm run predev && vite",
     "build": "vite build",
     "preview": "vite preview"
   },

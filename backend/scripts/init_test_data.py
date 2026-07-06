@@ -90,7 +90,7 @@ USER_POOL = {
 
 # 工单类型和对应的示例数据
 TICKET_TEMPLATES = {
-    "leave_request": [
+    "请假申请": [
         {
             "title": "年假申请",
             "description": "申请年假,需要回家处理个人事务",
@@ -122,7 +122,7 @@ TICKET_TEMPLATES = {
             }
         },
     ],
-    "certify": [
+    "证明开具": [
         {
             "title": "在职证明申请",
             "description": "需要开具在职证明用于办理签证",
@@ -144,7 +144,7 @@ TICKET_TEMPLATES = {
             }
         },
     ],
-    "info_change": [
+    "信息变更": [
         {
             "title": "手机号码变更",
             "description": "更换了新的手机号码",
@@ -166,7 +166,7 @@ TICKET_TEMPLATES = {
             }
         },
     ],
-    "attendance_exception": [
+    "考勤异常": [
         {
             "title": "忘打卡申请",
             "description": "早上忘记打卡",
@@ -186,7 +186,7 @@ TICKET_TEMPLATES = {
             }
         },
     ],
-    "reimbursement": [
+    "报销薪资": [
         {
             "title": "差旅费报销",
             "description": "出差期间产生的差旅费用",
@@ -206,7 +206,7 @@ TICKET_TEMPLATES = {
             }
         },
     ],
-    "other": [
+    "其他": [
         {
             "title": "IT设备申请",
             "description": "申请新的笔记本电脑",

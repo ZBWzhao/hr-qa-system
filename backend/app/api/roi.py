@@ -49,5 +49,5 @@ def get_roi_report(current_user: User = Depends(require_roles("hr")), db: Sessio
         "equivalent_fte": round(month_saved_hours / 160, 2),
         "qa_trend": trend,
         "roi_percentage": round((month_saved_hours * 100) / (160 * 2), 1) if month_saved_hours > 0 else 0,
-        "report_summary": f"本月智能问答{month_qa}次，等效节省{month_saved_hours}工时，相当于{round(month_saved_hours/160, 1)}个全职HR的工作量"
+        "report_summary": f"本月智能问答{month_qa}次，等效节省{month_saved_hours}工时，相当于{round(month_saved_hours/160, 2)}个全职HR的工作量"
     })
