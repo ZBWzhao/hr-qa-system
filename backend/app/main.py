@@ -132,9 +132,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_PREFIX}/openapi.json", lifespan=lifespan)
 
+# CORS 配置 - 显式列出允许的前端域名（allow_credentials=True 时不能使用 "*")
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",      # 本地开发
+    "http://localhost:3000",      # 本地开发备选
+    "http://127.0.0.1:5173",     # 本地开发
+    "https://fortunate-youthfulness-production-7cec.up.railway.app",  # Railway 前端
+]
+
+# 从环境变量读取额外的允许域名（逗号分隔）
+extra_origins = os.environ.get("ALLOWED_ORIGINS", "")
+if extra_origins:
+    ALLOWED_ORIGINS.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
