@@ -160,7 +160,7 @@ import { getRoiReport } from '../api/roi'
 import { renderSimpleMarkdown } from '../utils/markdown'
 import { normalizeCategoryChartData } from '../utils/answerTypeLabels'
 import { normalizeTicketTypeChartData } from '../utils/ticketTypeLabels'
-import { getGuideCategories, batchImportGuideItems } from '../api/guide'
+import { getGuideList, batchImportGuideItems } from '../api/guide'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
@@ -291,10 +291,8 @@ async function handleTopQuestionsGuideAnalysis() {
   try {
     const res = await generateTopQuestionsGuideAnalysis()
     analyses.top_questions_guide = res.data?.content || ''
-    // 先加载分类（如尚未加载），再填充推荐
-    if (!guideCategories.value.length) {
-      await loadGuideCategories()
-    }
+    // 每次分析前刷新分类列表
+    await loadGuideCategories()
     // 填充结构化推荐数据，AI 预选分类
     const recs = res.data?.recommendations || []
     guideRecommendations.value = recs.map(r => ({
@@ -312,14 +310,15 @@ async function handleTopQuestionsGuideAnalysis() {
   }
 }
 
-// 加载指引分类列表
+// 加载指引分类列表（使用 /guide 公开接口，含通用分类 + 本部门分类）
 async function loadGuideCategories() {
   try {
-    const res = await getGuideCategories()
-    guideCategories.value = res.data || []
-    console.log('[guide_categories] loaded:', guideCategories.value.length, 'categories')
+    const res = await getGuideList()
+    const cats = res.data?.categories || []
+    guideCategories.value = cats.map(c => ({ id: c.id, title: c.title }))
   } catch (e) {
     console.error('[guide_categories] load failed:', e)
+    guideCategories.value = []
   }
 }
 
@@ -366,7 +365,9 @@ async function handleBatchImport() {
     const created = res.data?.created || 0
     const skipped = res.data?.skipped || []
     if (created > 0) {
-      ElMessage.success(`成功导入 ${created} 条指引`)
+      const catNames = [...new Set(items.map(r => guideCategories.value.find(c => c.id === r.category_id)?.title).filter(Boolean))]
+      const hint = catNames.length ? `，请到「速查指引 → 管理指引 → ${catNames.join('、')}」查看编辑` : ''
+      ElMessage.success(`成功导入 ${created} 条指引${hint}`)
     }
     if (skipped.length) {
       ElMessage.warning(`${skipped.length} 条导入失败：${skipped.map(s => s.reason).join('、')}`)

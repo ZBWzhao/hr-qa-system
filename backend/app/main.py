@@ -78,6 +78,13 @@ def init_rag_system():
         from app.services.text_splitter import chunk_document
         from app.services.rag.vectorstore import add_documents, delete_document, get_collection_stats
 
+        stats = get_collection_stats()
+        existing_chunks = stats.get("total_chunks", 0)
+        force_reindex = os.environ.get("FORCE_RAG_REINDEX", "").lower() in ("1", "true", "yes")
+        if existing_chunks > 0 and not force_reindex:
+            logger.info("RAG向量库已有 %d 条数据，跳过全量重建（设置 FORCE_RAG_REINDEX=1 可强制重建）", existing_chunks)
+            return
+
         logger.info("正在初始化RAG系统...")
         db = SessionLocal()
         try:

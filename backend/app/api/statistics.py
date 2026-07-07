@@ -430,8 +430,17 @@ def generate_top_questions_guide_analysis(
     existing_items = db.query(GuideItem.question).all()
     existing_questions = [item.question for item in existing_items]
 
-    # 获取现有分类列表（供AI参考）
-    categories = db.query(GuideCategory).order_by(GuideCategory.sort_order).all()
+    # 获取现有分类列表（供AI参考，与可导入分类范围一致）
+    from sqlalchemy import or_
+    cat_query = db.query(GuideCategory)
+    if current_user.role != "admin" and current_user.department_id:
+        cat_query = cat_query.filter(
+            or_(
+                GuideCategory.department_id == current_user.department_id,
+                GuideCategory.department_id.is_(None),
+            )
+        )
+    categories = cat_query.order_by(GuideCategory.sort_order).all()
     category_names = [c.title for c in categories]
     categories_text = "、".join(category_names) if category_names else "暂无分类"
 

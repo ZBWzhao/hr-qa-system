@@ -1,5 +1,5 @@
 """新手指引速查 - CRUD API"""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
@@ -11,6 +11,23 @@ from app.models.user import User
 from app.models.guide import GuideCategory, GuideItem
 
 router = APIRouter()
+
+HR_MANAGE_ROLES = ("hr", "admin")
+
+
+def _guide_category_query(db: Session, current_user: User):
+    """与查看/管理一致的分类范围：通用分类 + 本部门专属分类"""
+    from sqlalchemy import or_
+
+    query = db.query(GuideCategory)
+    if current_user.role != "admin" and current_user.department_id:
+        query = query.filter(
+            or_(
+                GuideCategory.department_id == current_user.department_id,
+                GuideCategory.department_id.is_(None),
+            )
+        )
+    return query.order_by(GuideCategory.sort_order)
 
 
 # ==================== Pydantic Schemas ====================
@@ -51,24 +68,39 @@ class BatchItemImport(BaseModel):
 # ==================== 查询接口（所有用户可用） ====================
 
 @router.get("")
-def list_guide(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """新手指引目录（不含完整答案，点击条目再查）"""
-    query = db.query(GuideCategory)
-    # 部门隔离：非管理员只能看到自己部门的指引或通用指引（department_id 为 None）
-    if current_user.role != "admin" and current_user.department_id:
-        from sqlalchemy import or_
-        query = query.filter(or_(GuideCategory.department_id == current_user.department_id, GuideCategory.department_id == None))
-    categories = query.order_by(GuideCategory.sort_order).all()
+def list_guide(
+    for_manage: bool = Query(False, description="HR 管理模式，返回完整条目字段"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """新手指引目录；for_manage=1 时 HR/管理员可获取完整条目供管理弹窗使用"""
+    if for_manage and current_user.role not in HR_MANAGE_ROLES:
+        return error("无权访问", code=403)
+
+    categories = _guide_category_query(db, current_user).all()
     result = []
     for cat in categories:
         items = db.query(GuideItem).filter(
             GuideItem.category_id == cat.id
         ).order_by(GuideItem.sort_order).all()
-        result.append({
-            "id": cat.id,
-            "title": cat.title,
-            "items": [{"id": item.id, "question": item.question} for item in items]
-        })
+        if for_manage:
+            result.append({
+                "id": cat.id,
+                "title": cat.title,
+                "sort_order": cat.sort_order,
+                "items": [{
+                    "id": item.id,
+                    "question": item.question,
+                    "answer": item.answer,
+                    "sort_order": item.sort_order,
+                } for item in items],
+            })
+        else:
+            result.append({
+                "id": cat.id,
+                "title": cat.title,
+                "items": [{"id": item.id, "question": item.question} for item in items],
+            })
     total = sum(len(r["items"]) for r in result)
     return success({"categories": result, "total": total})
 
@@ -92,13 +124,9 @@ def get_guide_item(item_id: int, current_user: User = Depends(get_current_user),
 # ==================== 管理接口（仅HR可用） ====================
 
 @router.get("/admin/categories")
-def list_categories(current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
+def list_categories(current_user: User = Depends(require_roles(*HR_MANAGE_ROLES)), db: Session = Depends(get_db)):
     """获取所有分类（含完整条目）"""
-    query = db.query(GuideCategory)
-    # 部门隔离：非管理员只能看到自己部门的指引
-    if current_user.role != "admin" and current_user.department_id:
-        query = query.filter(GuideCategory.department_id == current_user.department_id)
-    categories = query.order_by(GuideCategory.sort_order).all()
+    categories = _guide_category_query(db, current_user).all()
     result = []
     for cat in categories:
         items = db.query(GuideItem).filter(
@@ -119,7 +147,7 @@ def list_categories(current_user: User = Depends(require_roles("hr")), db: Sessi
 
 
 @router.post("/admin/categories")
-def create_category(data: CategoryCreate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
+def create_category(data: CategoryCreate, current_user: User = Depends(require_roles(*HR_MANAGE_ROLES)), db: Session = Depends(get_db)):
     """创建分类"""
     category = GuideCategory(title=data.title, sort_order=data.sort_order, department_id=current_user.department_id)
     db.add(category)
@@ -129,7 +157,7 @@ def create_category(data: CategoryCreate, current_user: User = Depends(require_r
 
 
 @router.put("/admin/categories/{category_id}")
-def update_category(category_id: int, data: CategoryUpdate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
+def update_category(category_id: int, data: CategoryUpdate, current_user: User = Depends(require_roles(*HR_MANAGE_ROLES)), db: Session = Depends(get_db)):
     """更新分类"""
     category = db.query(GuideCategory).filter(GuideCategory.id == category_id).first()
     if not category:
@@ -143,7 +171,7 @@ def update_category(category_id: int, data: CategoryUpdate, current_user: User =
 
 
 @router.delete("/admin/categories/{category_id}")
-def delete_category(category_id: int, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
+def delete_category(category_id: int, current_user: User = Depends(require_roles(*HR_MANAGE_ROLES)), db: Session = Depends(get_db)):
     """删除分类（级联删除条目）"""
     category = db.query(GuideCategory).filter(GuideCategory.id == category_id).first()
     if not category:
@@ -154,7 +182,7 @@ def delete_category(category_id: int, current_user: User = Depends(require_roles
 
 
 @router.post("/admin/categories/{category_id}/items")
-def create_item(category_id: int, data: ItemCreate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
+def create_item(category_id: int, data: ItemCreate, current_user: User = Depends(require_roles(*HR_MANAGE_ROLES)), db: Session = Depends(get_db)):
     """创建条目"""
     category = db.query(GuideCategory).filter(GuideCategory.id == category_id).first()
     if not category:
@@ -172,7 +200,7 @@ def create_item(category_id: int, data: ItemCreate, current_user: User = Depends
 
 
 @router.put("/admin/items/{item_id}")
-def update_item(item_id: int, data: ItemUpdate, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
+def update_item(item_id: int, data: ItemUpdate, current_user: User = Depends(require_roles(*HR_MANAGE_ROLES)), db: Session = Depends(get_db)):
     """更新条目"""
     item = db.query(GuideItem).filter(GuideItem.id == item_id).first()
     if not item:
@@ -188,7 +216,7 @@ def update_item(item_id: int, data: ItemUpdate, current_user: User = Depends(req
 
 
 @router.delete("/admin/items/{item_id}")
-def delete_item(item_id: int, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
+def delete_item(item_id: int, current_user: User = Depends(require_roles(*HR_MANAGE_ROLES)), db: Session = Depends(get_db)):
     """删除条目"""
     item = db.query(GuideItem).filter(GuideItem.id == item_id).first()
     if not item:
@@ -199,7 +227,7 @@ def delete_item(item_id: int, current_user: User = Depends(require_roles("hr")),
 
 
 @router.post("/admin/items/batch")
-def batch_import_items(data: BatchItemImport, current_user: User = Depends(require_roles("hr")), db: Session = Depends(get_db)):
+def batch_import_items(data: BatchItemImport, current_user: User = Depends(require_roles(*HR_MANAGE_ROLES)), db: Session = Depends(get_db)):
     """批量导入指引条目"""
     if not data.items:
         return error("导入列表为空")

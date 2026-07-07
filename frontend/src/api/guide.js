@@ -1,8 +1,8 @@
 import request from '../utils/request'
 
 // 查询接口（所有用户）
-export function getGuideList() {
-  return request.get('/guide')
+export function getGuideList(forManage = false) {
+  return request.get('/guide', { params: forManage ? { for_manage: true } : {} })
 }
 
 export function getGuideItem(itemId) {

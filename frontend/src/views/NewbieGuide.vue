@@ -64,10 +64,10 @@
             <div
               v-for="cat in manageCategories"
               :key="cat.id"
-              :class="['category-item', { active: selectedManageCategory?.id === cat.id }]"
+              :class="['category-item', { active: selectedManageCategoryId === cat.id }]"
               @click="selectManageCategory(cat)"
             >
-              <span>{{ cat.title }}</span>
+              <span>{{ cat.title }}（{{ cat.items?.length || 0 }}）</span>
               <div class="category-actions">
                 <el-button text size="small" @click.stop="showEditCategory(cat)">
                   <el-icon><Edit /></el-icon>
@@ -89,11 +89,11 @@
                 <el-icon><Plus /></el-icon> 新增条目
               </el-button>
             </div>
-            <el-table :data="selectedManageCategory.items" border>
+            <el-table v-loading="manageLoading" :data="selectedManageCategory.items" border row-key="id">
               <el-table-column prop="question" label="问题" min-width="200" />
               <el-table-column prop="answer" label="答案" min-width="300">
                 <template #default="{ row }">
-                  <div class="answer-preview">{{ row.answer.substring(0, 100) }}{{ row.answer.length > 100 ? '...' : '' }}</div>
+                  <div class="answer-preview">{{ previewAnswer(row.answer) }}</div>
                 </template>
               </el-table-column>
               <el-table-column prop="sort_order" label="排序" width="80" />
@@ -157,7 +157,7 @@ import { ArrowLeft, Edit, Plus, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getGuideList, getGuideItem,
-  getGuideCategories, createGuideCategory, updateGuideCategory, deleteGuideCategory,
+  createGuideCategory, updateGuideCategory, deleteGuideCategory,
   createGuideItem, updateGuideItem, deleteGuideItem
 } from '../api/guide'
 
@@ -174,7 +174,11 @@ const selectedItem = ref(null)
 // 管理模式数据
 const manageDialogVisible = ref(false)
 const manageCategories = ref([])
-const selectedManageCategory = ref(null)
+const manageLoading = ref(false)
+const selectedManageCategoryId = ref(null)
+const selectedManageCategory = computed(() =>
+  manageCategories.value.find(c => c.id === selectedManageCategoryId.value) || null
+)
 
 // 分类编辑
 const categoryDialogVisible = ref(false)
@@ -189,6 +193,38 @@ const editingItemId = ref(null)
 const itemForm = ref({ question: '', answer: '', sort_order: 0 })
 
 const saving = ref(false)
+
+function previewAnswer(answer) {
+  const text = answer || ''
+  if (!text) return '（暂无答案）'
+  return text.length > 100 ? `${text.substring(0, 100)}...` : text
+}
+
+async function enrichCategoryItems(categories) {
+  const needsEnrich = categories.some(cat =>
+    (cat.items || []).some(item => item.answer === undefined || item.answer === null)
+  )
+  if (!needsEnrich) return categories
+
+  return Promise.all(categories.map(async (cat) => ({
+    ...cat,
+    items: await Promise.all((cat.items || []).map(async (item) => {
+      if (item.answer !== undefined && item.answer !== null) return item
+      try {
+        const res = await getGuideItem(item.id)
+        const data = res.data || {}
+        return {
+          ...item,
+          question: data.question ?? item.question,
+          answer: data.answer ?? '',
+          sort_order: data.sort_order ?? item.sort_order ?? 0,
+        }
+      } catch {
+        return { ...item, answer: item.answer ?? '', sort_order: item.sort_order ?? 0 }
+      }
+    })),
+  })))
+}
 
 // ==================== 查看模式 ====================
 
@@ -222,19 +258,27 @@ async function selectItem(id) {
 async function openManageDialog() {
   manageDialogVisible.value = true
   await loadManageCategories()
+  await loadList()
 }
 
 async function loadManageCategories() {
+  manageLoading.value = true
   try {
-    const res = await getGuideCategories()
-    manageCategories.value = res.data || []
+    const res = await getGuideList(true)
+    const categories = res.data?.categories || []
+    manageCategories.value = await enrichCategoryItems(categories)
+    if (selectedManageCategoryId.value && !manageCategories.value.some(c => c.id === selectedManageCategoryId.value)) {
+      selectedManageCategoryId.value = null
+    }
   } catch (e) {
     ElMessage.error('加载分类失败')
+  } finally {
+    manageLoading.value = false
   }
 }
 
 function selectManageCategory(cat) {
-  selectedManageCategory.value = cat
+  selectedManageCategoryId.value = cat.id
 }
 
 // 分类操作
@@ -268,6 +312,7 @@ async function handleSaveCategory() {
     }
     categoryDialogVisible.value = false
     await loadManageCategories()
+    await loadList()
   } catch (e) {
     ElMessage.error('操作失败')
   } finally {
@@ -282,10 +327,11 @@ async function handleDeleteCategory(cat) {
     })
     await deleteGuideCategory(cat.id)
     ElMessage.success('删除成功')
-    if (selectedManageCategory.value?.id === cat.id) {
-      selectedManageCategory.value = null
+    if (selectedManageCategoryId.value === cat.id) {
+      selectedManageCategoryId.value = null
     }
     await loadManageCategories()
+    await loadList()
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('删除失败')
   }
@@ -299,10 +345,25 @@ function showAddItem() {
   itemDialogVisible.value = true
 }
 
-function showEditItem(item) {
+async function showEditItem(item) {
   isEditItem.value = true
   editingItemId.value = item.id
-  itemForm.value = { question: item.question, answer: item.answer, sort_order: item.sort_order }
+  if (item.answer !== undefined && item.answer !== null) {
+    itemForm.value = { question: item.question, answer: item.answer, sort_order: item.sort_order ?? 0 }
+    itemDialogVisible.value = true
+    return
+  }
+  try {
+    const res = await getGuideItem(item.id)
+    const data = res.data || {}
+    itemForm.value = {
+      question: data.question ?? item.question,
+      answer: data.answer ?? '',
+      sort_order: data.sort_order ?? 0,
+    }
+  } catch {
+    itemForm.value = { question: item.question, answer: '', sort_order: item.sort_order ?? 0 }
+  }
   itemDialogVisible.value = true
 }
 
@@ -322,9 +383,7 @@ async function handleSaveItem() {
     }
     itemDialogVisible.value = false
     await loadManageCategories()
-    // 重新选中当前分类以刷新条目列表
-    const updatedCat = manageCategories.value.find(c => c.id === selectedManageCategory.value?.id)
-    if (updatedCat) selectedManageCategory.value = updatedCat
+    await loadList()
   } catch (e) {
     ElMessage.error('操作失败')
   } finally {
@@ -340,9 +399,7 @@ async function handleDeleteItem(item) {
     await deleteGuideItem(item.id)
     ElMessage.success('删除成功')
     await loadManageCategories()
-    // 重新选中当前分类以刷新条目列表
-    const updatedCat = manageCategories.value.find(c => c.id === selectedManageCategory.value?.id)
-    if (updatedCat) selectedManageCategory.value = updatedCat
+    await loadList()
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('删除失败')
   }
