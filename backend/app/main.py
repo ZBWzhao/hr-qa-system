@@ -1,8 +1,9 @@
 import os
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.api import auth, users, departments, documents, rules, search, chat, chat_history, conversations, feedback, notices, tickets, comments, recommendations, onboarding, reminders, gaps, roi, approvals, bot, guide, statistics, sql_import
@@ -132,10 +133,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_PREFIX}/openapi.json", lifespan=lifespan)
 
-# CORS 配置 - 显式列出允许的前端域名（allow_credentials=True 时不能使用 "*")
+# CORS 配置 - 必须在最前面添加，确保预检请求(OPTIONS)能被正确处理
+# allow_credentials=True 时不能使用 "*"，必须显式列出允许的前端域名
 ALLOWED_ORIGINS = [
     "http://localhost:5173",      # 本地开发
     "http://localhost:3000",      # 本地开发备选
+    "http://127.0.0.1:3000",      # 本地开发备选
     "http://127.0.0.1:5173",     # 本地开发
     "https://fortunate-youthfulness-production-7cec.up.railway.app",  # Railway 前端
 ]
@@ -152,6 +155,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"code": 500, "message": "服务器内部错误，请稍后重试", "data": None},
+    )
 
 app.include_router(auth.router, prefix=f"{settings.API_V1_PREFIX}/auth", tags=["认证"])
 app.include_router(users.router, prefix=f"{settings.API_V1_PREFIX}/users", tags=["用户管理"])
